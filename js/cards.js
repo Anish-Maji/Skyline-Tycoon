@@ -110,6 +110,16 @@ const CARD_ART = {
     cRound(c, x + 26, y + 34, 38, 14, 4); cFill(c, "#8a5a34", INK, 2.5);
     c.save(); c.translate(x + 50, y + 34); c.rotate(-.6); cRound(c, -8, -40, 16, 36, 4); cFill(c, "#a06a3c", INK, 2.5); c.restore();
   },
+  demolish(c, x, y){
+    c.fillStyle = "#8a5a34"; c.fillRect(x - 90, y + 44, 180, 8);
+    cRound(c, x + 4, y - 44, 56, 88, 4); cFill(c, "#b8c2c9", INK, 3);
+    c.fillStyle = "#6b7880"; for (let r = 0; r < 4; r++) for (let k = 0; k < 2; k++) c.fillRect(x + 14 + k*22, y - 34 + r*19, 12, 11);
+    cPoly(c, [[x + 4, y - 44], [x + 22, y - 44], [x + 12, y - 28], [x + 18, y - 16], [x + 4, y - 10]], "#f6ead8");   // the chunk knocked out
+    [[x - 6, y - 30, 6], [x - 14, y - 12, 4], [x - 2, y - 4, 3]].forEach(([a, b, r]) => cCircle(c, a, b, r, "#b8c2c9", INK, 2));
+    c.strokeStyle = INK; c.lineWidth = 3; c.beginPath(); c.moveTo(x - 70, y - 62); c.lineTo(x - 22, y - 30); c.stroke();
+    cCircle(c, x - 22, y - 30, 17, "#3a3f45", INK, 3); cCircle(c, x - 27, y - 35, 5, "#6b7480");
+    c.strokeStyle = "#ffd23f"; c.lineWidth = 3; [[-2, -52, 8, -60], [6, -36, 16, -38], [-2, -14, 6, -6]].forEach(([a, b, d, e]) => { c.beginPath(); c.moveTo(x + a, y + b); c.lineTo(x + d, y + e); c.stroke(); });
+  },
   jet(c, x, y){
     cCircle(c, x, y + 6, 46, "#4aa3e8", INK, 3);
     c.save(); c.beginPath(); c.arc(x, y + 6, 44, 0, Math.PI*2); c.clip();

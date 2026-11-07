@@ -185,6 +185,8 @@ function shielded(s, p, what){ if (!p || !p.shield) return false; p.shield--; sa
 function freeBuildOptions(s, p){ const cap = buildCap(p); return owned(s, p.id).filter(i => TILES[i].type === "city" && s.own[i].l < 5 && s.own[i].l + 1 <= cap); }
 /* Rival cities and beaches p can force-buy at their normal value. Landmarks are safe. */
 function forceSaleOptions(s, p){ return Object.keys(s.own).map(Number).filter(i => { const st = s.own[i], o = byId(s, st.o); return st.o !== p.id && o && !o.bankrupt && (TILES[i].type === "beach" || st.l < 5) && tileValue(i, st) <= p.cash; }); }
+/* Rival cities with at least House 1 that the Demolition card can knock down one level. Landmarks count too. */
+function demolishOptions(s, p){ return Object.keys(s.own).map(Number).filter(i => { const st = s.own[i], o = byId(s, st.o); return TILES[i].type === "city" && st.o !== p.id && o && !o.bankrupt && st.l >= 2; }); }
 function drawCard(s, p){
   const c = CARDS[Math.floor(Math.random()*CARDS.length)], until = (s.round || 1) + EVENT_ROUNDS;
   s.cardSeq = (s.cardSeq||0) + 1; s.card = {id:c.id, kind:c.kind, title:c.title, text:c.text, pid:p.id, seq:s.cardSeq};
@@ -225,6 +227,9 @@ function drawCard(s, p){
       if (forceSaleOptions(s, p).length){ s.phase = "act"; s.pending = {k:"forcebuy"}; return; }
       say(s, `${p.name} has no rival city to force-buy right now.`); return finish(s);
     case "jet": jumpTo(s, p, 24, true); return resolve(s, p);
+    case "demolish":
+      if (demolishOptions(s, p).length){ s.phase = "act"; s.pending = {k:"demolish"}; return; }
+      say(s, `${p.name} has no rival building to knock down.`); return finish(s);
   }
   return finish(s);
 }
@@ -347,6 +352,13 @@ function act(s0, a){
       const st = s.own[a.tile]; st.l++;
       say(s, `${p.name} built ${st.l === 5 ? "a Landmark" : "up to " + LEVEL_NAMES[st.l]} in ${TILES[a.tile].name} for free.`); finish(s); break;
     }
+    case "demolish": {
+      if (s.phase !== "act" || !s.pending || s.pending.k !== "demolish") return E("Nothing to knock down.");
+      if (!demolishOptions(s, p).includes(a.tile)) return E("Pick a rival city with a building.");
+      const st = s.own[a.tile], owner = byId(s, st.o), was = LEVEL_NAMES[st.l];
+      if (!shielded(s, owner, `demolition in ${TILES[a.tile].name}`)){ st.l--; say(s, `${p.name} knocked down ${owner.name}'s ${was} in ${TILES[a.tile].name}. It is now ${LEVEL_NAMES[st.l]}.`); }
+      finish(s); break;
+    }
     case "forcebuy": {
       if (s.phase !== "act" || !s.pending || s.pending.k !== "forcebuy") return E("Nothing to buy.");
       if (!forceSaleOptions(s, p).includes(a.tile)) return E("You can't buy that city.");
@@ -406,6 +418,7 @@ function botAction(s){
     if (k === "takeover"){ const g = t.g; const help = g && TILES.some((u, j) => u.g === g && j !== i && s.own[j] && s.own[j].o === p.id); return (s.pending.cost <= p.cash - 300 && (help || Math.random() < .45)) ? {t:"takeover"} : {t:"skip"}; }
     if (k === "debt") return {t:"autosell"};
     if (k === "freebuild"){ const o = freeBuildOptions(s, p).sort((a, b) => TILES[b].price - TILES[a].price); return o.length ? {t:"freebuild", tile:o[0]} : {t:"skip"}; }
+    if (k === "demolish"){ const o = demolishOptions(s, p).sort((a, b) => rentOf(s, b) - rentOf(s, a)); return o.length ? {t:"demolish", tile:o[0]} : {t:"skip"}; }
     if (k === "forcebuy"){ const o = forceSaleOptions(s, p).filter(j => tileValue(j, s.own[j]) <= p.cash - 300).sort((a, b) => rentOf(s, b) - rentOf(s, a)); return o.length ? {t:"forcebuy", tile:o[0]} : {t:"skip"}; }
     if (k === "expo"){ const mine = owned(s, p.id).filter(j => TILES[j].type === "city").sort((a, b) => rentOf(s, b) - rentOf(s, a)); return {t:"expo", tile:mine[0]}; }
   }

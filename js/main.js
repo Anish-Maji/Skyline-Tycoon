@@ -75,7 +75,7 @@ function render(){
 }
 /* What the current player is deciding, shown in a thought bubble over their head so everyone can follow along */
 const THINKING = {buy:"Thinking about buying", upgrade:"Thinking about building", takeover:"Thinking about a buyout",
-  expo:"Picking an Expo city", freebuild:"Picking a city to build", forcebuy:"Picking a city to buy", debt:"Working out how to pay"};
+  expo:"Picking an Expo city", freebuild:"Picking a city to build", forcebuy:"Picking a city to buy", demolish:"Picking a building to knock down", debt:"Working out how to pay"};
 function thinkingText(s){
   if (s.status !== "playing") return null;
   if (s.phase === "fly") return "Picking where to fly";
@@ -147,6 +147,12 @@ function renderActions(){
       const sl = document.createElement("select"); sl.id = "expoSel"; sl.setAttribute("aria-label", "Expo city");
       mine.forEach(j => { const o = document.createElement("option"); o.value = j; o.textContent = `${TILES[j].name} · ${money(rentOf(s, j))}`; sl.appendChild(o); });
       box.appendChild(sl); box.appendChild(btn("Host here", () => dispatch({t:"expo", tile:+sl.value})));
+    } else if (k === "demolish"){
+      const opts = demolishOptions(s, p); board.setSelectable(new Set(opts));
+      tell("Demolition. Tap a glowing rival city to knock its building down one level.");
+      const sl = document.createElement("select"); sl.setAttribute("aria-label", "Building to knock down");
+      opts.forEach(j => { const st = s.own[j], o = document.createElement("option"); o.value = j; o.textContent = `${TILES[j].name} · ${byId(s, st.o).name} · ${LEVEL_NAMES[st.l]}`; sl.appendChild(o); });
+      box.appendChild(sl); box.appendChild(btn("Knock down", () => dispatch({t:"demolish", tile:+sl.value}))); box.appendChild(btn("Skip", () => dispatch({t:"skip"}), "ghost"));
     } else if (k === "freebuild" || k === "forcebuy"){
       const free = k === "freebuild", opts = free ? freeBuildOptions(s, p) : forceSaleOptions(s, p); board.setSelectable(new Set(opts));
       tell(free ? "Free build. Pick one of your cities to grow by one level." : "Force sale. Pick a rival city to buy at its normal value.");
@@ -301,6 +307,7 @@ board.onClick(i => {
   if (p && canControl(p) && !board.busy() && !app.writing){
     if (s.phase === "fly" && i !== 24){ dispatch({t:"fly", tile:i}); return; }
     if (s.phase === "act" && s.pending && s.pending.k === "debt"){ if (s.own[i] && s.own[i].o === p.id && performance.now() >= debtUI.until) toggleSell(i); return; }
+    if (s.phase === "act" && s.pending && s.pending.k === "demolish" && demolishOptions(s, p).includes(i)){ dispatch({t:"demolish", tile:i}); return; }
     if (s.phase === "act" && s.pending && (s.pending.k === "freebuild" || s.pending.k === "forcebuy") && (s.pending.k === "freebuild" ? freeBuildOptions(s, p) : forceSaleOptions(s, p)).includes(i)){ dispatch({t:s.pending.k, tile:i}); return; }
     if (s.phase === "act" && s.pending && s.pending.k === "expo" && s.own[i] && s.own[i].o === p.id && TILES[i].type === "city"){ dispatch({t:"expo", tile:i}); return; }
   }
@@ -347,7 +354,7 @@ function scheduleBot(){
 const IDLE_MS = 45000, BOT_STALL_MS = 8000, STAGGER_MS = 3000, AUTO_FOLLOW_MS = 3000;   // AUTO_FOLLOW_MS: next choice in a turn already being auto-played
 function autoMove(s){
   const k = s.phase === "act" && s.pending ? s.pending.k : null;
-  if (k && ["buy", "upgrade", "takeover", "freebuild", "forcebuy"].includes(k)) return {t:"skip"};
+  if (k && ["buy", "upgrade", "takeover", "freebuild", "forcebuy", "demolish"].includes(k)) return {t:"skip"};
   return botAction(s);
 }
 function idleLimit(s){ const cur = s.players[s.turn]; return cur.bot ? BOT_STALL_MS : s.autoFor === cur.id ? AUTO_FOLLOW_MS : IDLE_MS; }
@@ -381,7 +388,7 @@ function rulesHtml(R){
     R.doublesAgain ? "Double six: play the tile you land on (buy, build or pay), then roll again. Three double sixes in a row strand you on Lost Island. Any doubles get you off Lost Island." : "Any doubles get you off Lost Island. Double six doesn't give another roll.",
     !R.islandRent && "Players stuck on Lost Island can't collect rent.",
     R.festivals && `Every game starts with festivals in ${R.festivals === 1 ? "one random city" : R.festivals + " random cities"}. They last the whole game and double the rent there.`,
-    "Chance cards can be Boosts (shield, free build, tax exemption, escape card), Setbacks (earthquake, blackout, fines) or World events (epidemic, force sale, world tour).",
+    "Chance cards can be Boosts (shield, free build, tax exemption, escape card), Setbacks (earthquake, blackout, fines) or World events (epidemic, force sale, world tour, demolition).",
     "Grand Expo doubles rent in a city you choose. Jet Port lets you fly anywhere next turn.",
     (wins.length ? `Win instantly with ${wins.length > 1 ? wins.slice(0, -1).join(", ") + " or " + wins[wins.length - 1] : wins[0]}. Or be` : "Win by being") + " the last tycoon with money.",
     R.playTime && `The game lasts ${R.playTime < 60 ? R.playTime + " minutes" : R.playTime/60 + (R.playTime === 60 ? " hour" : " hours")}. When time runs out, the round finishes and the richest tycoon wins.`

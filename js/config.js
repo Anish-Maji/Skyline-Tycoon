@@ -102,7 +102,8 @@ const CARDS = [
   {id:"back",      kind:"bad",   title:"Wrong exit",          text:"Go back 3 tiles."},
   {id:"epidemic",  kind:"world", title:"Epidemic",            text:"Rent in one region is halved for 2 rounds."},
   {id:"forcesale", kind:"world", title:"Force sale",          text:"Buy any rival city that isn't a Landmark at its normal value."},
-  {id:"jet",       kind:"world", title:"World tour",          text:"Go to Jet Port and fly anywhere next turn."}
+  {id:"jet",       kind:"world", title:"World tour",          text:"Go to Jet Port and fly anywhere next turn."},
+  {id:"demolish",  kind:"world", title:"Demolition",          text:"Pick a rival's city. Its building drops one level, even a Landmark."}
 ];
 const CARD_KINDS = {good:{label:"Boost", color:"#23915a"}, bad:{label:"Setback", color:"#c9423a"}, world:{label:"World event", color:"#7c5cd6"}};
 /* How many rounds a Blackout or Epidemic lasts after the round it starts in */

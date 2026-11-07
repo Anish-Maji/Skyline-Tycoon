@@ -395,7 +395,8 @@ function showHome(){
 /* Why online play is off for this person, shown under the Host and Join cards */
 const ONLINE_WHY = {
   checking: "Connecting to online rooms...",
-  local: "Online rooms only work on the claude.ai link. You can still play on this device.",
+  local: "Online rooms aren't set up on this site yet. You can still play on this device.",
+  fbfail: "Couldn't connect to online rooms. Check your connection and reload. You can still play on this device.",
   off: "Online rooms need you signed in to claude.ai and invited to this page by the host. You can still play on this device.",
   viewonly: "You can only view this page, so you can't host or join. Ask the host to give you permission to use it. You can still play on this device."
 };
@@ -405,7 +406,11 @@ function parseCode(v){
   const c = v.toUpperCase().replace(/[^A-Z0-9]/g, ""); return c.length === 5 ? c : null;
 }
 /* The invite message: the game's claude.ai link plus the room code (the page runs in a frame, so its own address is not shareable) */
-function inviteText(code){ return `Join my Skyline Tycoon game: open ${SHARE_URL}, enter your name and type room code ${code}.`; }
+/* On claude.ai the page runs in a frame, so invites point at the artifact link. On your own site they use this page's address with #room=CODE. */
+function inviteText(code){
+  const url = app.backend === "claude" ? SHARE_URL : location.href.split("#")[0] + "#room=" + code;
+  return app.backend === "claude" ? `Join my Skyline Tycoon game: open ${url}, enter your name and type room code ${code}.` : `Join my Skyline Tycoon game: ${url} (room code ${code})`;
+}
 
 /* ---------- Screen 2: pick characters ----------
    One screen for both modes. Offline seats live in app.setup. Online seats are the room's players. */
@@ -674,16 +679,18 @@ $("sfxBtn").onclick = () => { audio.sfx = !audio.sfx; if (audio.sfx) ensureAudio
 $("overlay").addEventListener("click", e => { if (e.target === $("overlay") && app.mode && app.s && app.s.status !== "lobby") closeSheet(); });
 
 (async function init(){
-  app.online = window.claude && window.claude.use ? "checking" : "local";
+  const fbReady = typeof FIREBASE_CONFIG === "object" && FIREBASE_CONFIG && !!FIREBASE_CONFIG.apiKey;
+  app.online = (window.claude && window.claude.use) || fbReady ? "checking" : "local";
   board.start(); setState(demoState(), {reset:true}); showHome();
+  /* online rooms: claude.ai artifact runtime, or Firebase on your own site (js/net.js) */
   try{
-    if (window.claude && window.claude.use){
-      const [db, user] = await Promise.all([window.claude.use("db"), window.claude.use("user")]);
-      app.db = db; app.user = user; if (user) app.me = await user.id();
-      if (user){ const w = await user.can("data.write"); if (w === false) app.readOnly = true; }
+    const be = await connectBackend(); app.backend = be.kind;
+    if (be.kind !== "none"){
+      app.db = be.db; app.user = be.user; app.me = await be.user.id();
+      const w = await be.user.can("data.write"); if (w === false) app.readOnly = true;
     }
   }catch(e){ app.db = null; }
-  app.online = app.online === "local" ? "local" : app.readOnly ? "viewonly" : app.db && app.me ? "ok" : "off";
+  app.online = app.backend === "none" && !(window.claude && window.claude.use) ? (fbReady ? "fbfail" : "local") : app.readOnly ? "viewonly" : app.db && app.me ? "ok" : "off";
   if (!app.mode && $("overlay").dataset.view === "home"){
     /* redraw the home screen now that we know, keeping anything already typed */
     const nm = $("nameIn") ? $("nameIn").value : "", cd = $("codeIn") ? $("codeIn").value : "";

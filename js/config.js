@@ -29,6 +29,17 @@ const PLAY_TIMES = [20, 60, 120, 0];
 const LEVEL_NAMES = ["", "Land", "House 1", "House 2", "House 3", "Landmark"];
 /* The game's public claude.ai link. Invites send friends here with the room code. */
 const SHARE_URL = "https://claude.ai/artifact/3iTp5tUrE5zy2dEtF1kwVr";
+/* Online rooms on your own site (Vercel): paste the web app config from the Firebase console here.
+   Firebase web keys are meant to be public; the Firestore security rules are what protect the data.
+   Leave apiKey empty to keep online rooms off. See js/net.js. */
+const FIREBASE_CONFIG = {
+  apiKey: "",
+  authDomain: "",
+  projectId: "",
+  storageBucket: "",
+  messagingSenderId: "",
+  appId: ""
+};
 const PCOLORS = ["#e5484d", "#2f7fe0", "#e9a514", "#25a86a"];
 /* ================= REGIONS =================
    Each side of the board is two stacks of three tiles:

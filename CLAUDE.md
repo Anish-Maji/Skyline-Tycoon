@@ -26,10 +26,11 @@ Opening `index.html` directly works too, but image assets load more reliably fro
 | `js/audio.js` | Web Audio music loop and sound effects, generated in code. Also plays the tile landing sounds from `LANDING_SOUNDS` in `config.js` (files in `assets/sounds/`). |
 | `js/render.js` | Isometric drawing kit, asset loader, board renderer, build-card art. |
 | `js/cards.js` | Chance card pictures drawn in code (`CARD_ART`, one per card id) and `chanceArt()`. |
+| `js/net.js` | Online backend: `connectBackend()` uses the claude.ai artifact runtime when present, otherwise Firebase from `FIREBASE_CONFIG` in `config.js` (anonymous sign-in, Firestore). |
 | `js/chars.js` | The 12 tycoon characters drawn in code (`TYCOON_ART`), their hand gestures, facing per board side, and live animated canvases. |
 | `js/main.js` | App and UI: home screen (host or join), character picker, corner player panels, center move buttons, tile card, build popup, online rooms, bot scheduling. |
 
-Scripts are classic (not ES modules) and share top-level names, so load order in `index.html` matters: config, engine, audio, render, chars, cards, main.
+Scripts are classic (not ES modules) and share top-level names, so load order in `index.html` matters: config, engine, audio, render, chars, cards, net, main.
 
 ## How the game state works
 
@@ -90,7 +91,9 @@ The game is published as a claude.ai artifact at https://claude.ai/artifact/3iTp
 
 Online rooms use the claude.ai artifact runtime: `window.claude.use("db")` and `window.claude.use("user")`. These exist only when the page runs as a claude.ai artifact. Run locally or on your own host and they resolve to null, so the menu hides online play and offline mode still works.
 
-To host it yourself with multiplayer, replace the database calls in `main.js` (`hostRoom`, `joinRoom`, `subscribe`, `lobbyEdit`, `dispatch`) with a real backend. The code only needs:
+On your own host (the site is deployed on Vercel from GitHub `Anish-Maji/Skyline-Tycoon`, branch `main`), online rooms use Firebase: fill `FIREBASE_CONFIG` in `config.js`, turn on Anonymous sign-in and Firestore, and publish `firestore.rules`. `js/net.js` wraps Firestore in the same shape described below. Invites on your own host use `#room=CODE` links.
+
+To use a different backend instead, replace the database calls in `main.js` (`hostRoom`, `joinRoom`, `subscribe`, `lobbyEdit`, `dispatch`) with a real backend. The code only needs:
 - `doc(path).set(obj)`, `doc(path).get()` returning `{exists, data()}`
 - `doc(path).onSnapshot(callback, onError)` returning an unsubscribe function
 - `doc(path).acquire({holder, ttlMs})` returning `{acquired}` (a short lock for lobby joins)

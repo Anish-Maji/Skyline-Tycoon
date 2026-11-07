@@ -137,7 +137,11 @@ function tileRect(i){
   if (i < 24){ const X0 = D+(i-17); return {X0, X1:X0+1, Y0:0, Y1:D, side:2}; }
   const Y0 = D+(i-25); return {X0:S-D, X1:S, Y0, Y1:Y0+1, side:3};
 }
-function along(r, f){ const mx = (r.X0 + r.X1)/2, my = (r.Y0 + r.Y1)/2;
+/* Sides listed here lay their tiles out the other way round: from the back (the road) to the front (the outer edge)
+   you see the festival flags, the building, the name, then the rent tag. Everything placed with along() and sub()
+   follows, so the tile reads front to back like the other sides read to the viewer. */
+const FLIPPED_SIDES = [3];
+function along(r, f){ const mx = (r.X0 + r.X1)/2, my = (r.Y0 + r.Y1)/2; if (FLIPPED_SIDES.includes(r.side)) f = 1 - f;
   if (r.side === 0) return [mx, S - f*D]; if (r.side === 1) return [f*D, my]; if (r.side === 2) return [mx, f*D]; if (r.side === 3) return [S - f*D, my]; return [mx, my]; }
 function sub(r, f0, f1){ const a = along(r, f0), b = along(r, f1);
   if (r.side === 0 || r.side === 2) return {X0:r.X0, X1:r.X1, Y0:Math.min(a[1], b[1]), Y1:Math.max(a[1], b[1])};

@@ -1,0 +1,6 @@
+# Local tooling (preview server config points at a temp folder on this computer)
+.claude/
+_tmpvid/
+node_modules/
+.DS_Store
+Thumbs.db

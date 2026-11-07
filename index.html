@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Skyline Tycoon</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Figtree:wght@400;500;600;700;800;900&display=swap">
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<main class="stage" id="stage">
+  <canvas id="board" aria-label="Game board"></canvas>
+  <div class="corners" id="players"></div>
+  <div class="toolbar">
+    <span class="chip" id="roomChip" hidden></span>
+    <span class="chip clock" id="clockChip" hidden aria-live="off"></span>
+    <button class="iconbtn" id="musicBtn" aria-pressed="false">Music</button>
+    <button class="iconbtn" id="sfxBtn" aria-pressed="true">Sound</button>
+    <button class="iconbtn" id="menuBtn">Menu</button>
+  </div>
+  <div class="hub" id="hub">
+    <div class="dice"><div class="die" id="d1"></div><div class="die" id="d2"></div></div>
+    <div class="turnline" id="turnline">Demo board</div>
+    <p class="bubble" id="bubble" aria-live="polite"></p>
+    <div class="hub-actions" id="actions"></div>
+  </div>
+  <div class="card" id="card" hidden role="status" aria-live="polite">
+    <div class="card-ribbon"><span id="cardTitle"></span></div>
+    <div class="card-art" id="cardArt"></div>
+    <p class="card-text" id="cardText"></p>
+    <div class="card-foot"><span class="card-kind" id="cardKind">CHANCE</span><span class="card-who" id="cardWho"></span></div>
+  </div>
+  <div class="selltags" id="sellTags"></div>
+  <div class="debt" id="debt" hidden role="dialog" aria-labelledby="debtHead">
+    <div class="debt-head" id="debtHead">SELECT A CITY TO SELL</div>
+    <div class="debt-body">
+      <dl class="debt-rows">
+        <dt>Money needed</dt><dd id="dNeed"></dd>
+        <dt>Cash in hand</dt><dd id="dCash"></dd>
+        <dt>From selected cities</dt><dd id="dSale"></dd>
+        <dt id="dLeftK">Left after paying</dt><dd id="dLeft"></dd>
+      </dl>
+      <p class="debt-msg" id="dMsg"></p>
+      <div class="debt-btns"><button class="btn ghost danger" id="dBankrupt">Bankrupt</button><button class="btn ghost" id="dAuto">Automatic sale</button><button class="btn" id="dSell">Sell</button></div>
+    </div>
+  </div>
+</main>
+<div class="alertband" id="alertBand" hidden aria-live="assertive"><span id="alertText"></span></div>
+
+
+<div class="bmodal" id="bmodal" hidden>
+  <div class="bsheet" role="dialog" aria-modal="true" aria-labelledby="btitle">
+    <div class="bhead" id="bhead"><div id="btitle"></div><button class="bclose" id="bclose" aria-label="Close and skip">×</button></div>
+    <div class="bbody">
+      <div class="levels" id="blevels"></div>
+      <p class="brent" id="brent"></p>
+      <button class="btn big" id="bbuy"></button>
+      <p class="bfoot" id="bfoot"></p>
+      <button class="linkbtn" id="bskip">Not now</button>
+    </div>
+  </div>
+</div>
+<div class="overlay" id="overlay"><div class="sheet" id="sheet"></div></div>
+<div class="toast" id="toast" hidden></div>
+<div class="qs-wrap" id="qs" hidden>
+  <div class="qs" role="dialog" aria-modal="true" aria-labelledby="qsTitle">
+    <div class="qs-head"><h2 id="qsTitle">QUICK SETTINGS</h2><button class="qs-x" id="qsClose" aria-label="Close quick settings">×</button></div>
+    <div class="qs-body">
+      <div class="qs-col" id="qsLeft"></div>
+      <div class="qs-col" id="qsRight"></div>
+    </div>
+    <div class="qs-foot"><span class="muted">Only you can see and change these.</span><button class="btn ghost" id="qsReset">Reset to default</button><button class="btn" id="qsDone">Done</button></div>
+  </div>
+</div>
+<script src="js/config.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/render.js"></script>
+<script src="js/chars.js"></script>
+<script src="js/cards.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

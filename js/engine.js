@@ -187,6 +187,9 @@ function freeBuildOptions(s, p){ const cap = buildCap(p); return owned(s, p.id).
 function forceSaleOptions(s, p){ return Object.keys(s.own).map(Number).filter(i => { const st = s.own[i], o = byId(s, st.o); return st.o !== p.id && o && !o.bankrupt && (TILES[i].type === "beach" || st.l < 5) && tileValue(i, st) <= p.cash; }); }
 /* Rival cities with at least House 1 that the Demolition card can knock down one level. Landmarks count too. */
 function demolishOptions(s, p){ return Object.keys(s.own).map(Number).filter(i => { const st = s.own[i], o = byId(s, st.o); return TILES[i].type === "city" && st.o !== p.id && o && !o.bankrupt && st.l >= 2; }); }
+/* Chance cards that make you pick a city. They can't be skipped: if time runs out, a random city is picked. */
+const CHANCE_PICKS = {freebuild:freeBuildOptions, forcebuy:forceSaleOptions, demolish:demolishOptions};
+function chanceOptions(s, p, k){ return CHANCE_PICKS[k] ? CHANCE_PICKS[k](s, p) : []; }
 function drawCard(s, p){
   const c = CARDS[Math.floor(Math.random()*CARDS.length)], until = (s.round || 1) + EVENT_ROUNDS;
   s.cardSeq = (s.cardSeq||0) + 1; s.card = {id:c.id, kind:c.kind, title:c.title, text:c.text, pid:p.id, seq:s.cardSeq};
@@ -381,6 +384,7 @@ function act(s0, a){
       say(s, `${p.name} declared bankruptcy.`); giveUp(s, p); break;
     case "skip":
       if (s.phase !== "act" || (s.pending && s.pending.k === "debt")) return E("Nothing to skip.");
+      if (s.pending && CHANCE_PICKS[s.pending.k] && chanceOptions(s, p, s.pending.k).length) return E("Chance cards can't be skipped. Pick a city.");
       finish(s); break;
     case "leave": {   // a player leaves an online game: a bot plays their seat from now on
       const tgt = byId(s, a.pid); if (!tgt || tgt.bankrupt || tgt.left) return E("That player has already left.");
@@ -413,12 +417,15 @@ function botAction(s){
       let to = 1; if (rules(s).botBuild) for (let l = 2; l <= Math.min(4, buildCap(p), stepCap(s, 0)); l++) if (costRange(t, 0, l) <= p.cash - 300) to = l;
       return {t:"buy", to};
     }
-    if (!rules(s).botBuild && (k === "upgrade" || k === "freebuild")) return {t:"skip"};
+    if (!rules(s).botBuild && k === "upgrade") return {t:"skip"};
     if (k === "upgrade"){ const o = upgradeOptions(s, p, i).filter(o => o.cost <= p.cash - 250); return o.length ? {t:"upgrade", to:o[o.length-1].to} : {t:"skip"}; }
     if (k === "takeover"){ const g = t.g; const help = g && TILES.some((u, j) => u.g === g && j !== i && s.own[j] && s.own[j].o === p.id); return (s.pending.cost <= p.cash - 300 && (help || Math.random() < .45)) ? {t:"takeover"} : {t:"skip"}; }
     if (k === "debt") return {t:"autosell"};
     if (k === "freebuild"){ const o = freeBuildOptions(s, p).sort((a, b) => TILES[b].price - TILES[a].price); return o.length ? {t:"freebuild", tile:o[0]} : {t:"skip"}; }
     if (k === "demolish"){ const o = demolishOptions(s, p).sort((a, b) => rentOf(s, b) - rentOf(s, a)); return o.length ? {t:"demolish", tile:o[0]} : {t:"skip"}; }
+    if (k === "forcebuy"){ const all = forceSaleOptions(s, p); if (!all.length) return {t:"skip"};
+      const o = all.filter(j => tileValue(j, s.own[j]) <= p.cash - 300).sort((a, b) => rentOf(s, b) - rentOf(s, a));
+      return {t:"forcebuy", tile:o.length ? o[0] : all.sort((a, b) => tileValue(a, s.own[a]) - tileValue(b, s.own[b]))[0]}; }
     if (k === "forcebuy"){ const o = forceSaleOptions(s, p).filter(j => tileValue(j, s.own[j]) <= p.cash - 300).sort((a, b) => rentOf(s, b) - rentOf(s, a)); return o.length ? {t:"forcebuy", tile:o[0]} : {t:"skip"}; }
     if (k === "expo"){ const mine = owned(s, p.id).filter(j => TILES[j].type === "city").sort((a, b) => rentOf(s, b) - rentOf(s, a)); return {t:"expo", tile:mine[0]}; }
   }

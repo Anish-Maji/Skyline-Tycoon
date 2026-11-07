@@ -109,6 +109,21 @@ function renderPlayers(){
 /* Full amounts can get long: shrink a corner panel's cash text until it fits */
 function fitCash(){ document.querySelectorAll(".cp-cash").forEach(e => { e.style.fontSize = ""; let f = parseFloat(getComputedStyle(e).fontSize); while (e.scrollWidth > e.clientWidth && f > 9){ f -= 1; e.style.fontSize = f + "px"; } }); }
 addEventListener("resize", fitCash);
+/* ---------- Chance pick timer ----------
+   Free build, Force sale and Demolition can't be skipped. The player has PICK_MS to choose a city;
+   then a random one from the glowing cities is picked for them. The countdown shows under the buttons. */
+const PICK_MS = 25000;
+const pickTimer = {key:null, until:0};
+function startPickTimer(s, k){
+  const key = s.rev + ":" + k; if (pickTimer.key !== key){ pickTimer.key = key; pickTimer.until = Date.now() + PICK_MS; }
+  const t = document.createElement("div"); t.className = "pick-timer"; t.id = "pickTimer"; $("actions").appendChild(t); tickPick();
+}
+function tickPick(){
+  const el = $("pickTimer"), s = app.s; if (!el || !s || !s.pending || !CHANCE_PICKS[s.pending.k] || pickTimer.key !== s.rev + ":" + s.pending.k){ return; }
+  const left = Math.max(0, Math.ceil((pickTimer.until - Date.now())/1000)); el.textContent = `Random pick in ${left}s`; el.classList.toggle("late", left <= 5);
+  if (left <= 0 && !app.writing){ const opts = chanceOptions(s, s.players[s.turn], s.pending.k); pickTimer.key = "done"; if (opts.length) dispatch({t:s.pending.k, tile:opts[Math.floor(Math.random()*opts.length)]}); else dispatch({t:"skip"}); }
+}
+setInterval(tickPick, 250);
 function btn(label, onclick, cls){ const b = document.createElement("button"); b.className = "btn " + (cls||""); b.textContent = label; b.onclick = onclick; return b; }
 /* The middle of the board: the turn line, a speech bubble with a prompt for the player whose move it is, and the buttons.
    The news log (who bought what, who paid rent) is not shown here. */
@@ -152,14 +167,14 @@ function renderActions(){
       tell("Demolition. Tap a glowing rival city to knock its building down one level.");
       const sl = document.createElement("select"); sl.setAttribute("aria-label", "Building to knock down");
       opts.forEach(j => { const st = s.own[j], o = document.createElement("option"); o.value = j; o.textContent = `${TILES[j].name} · ${byId(s, st.o).name} · ${LEVEL_NAMES[st.l]}`; sl.appendChild(o); });
-      box.appendChild(sl); box.appendChild(btn("Knock down", () => dispatch({t:"demolish", tile:+sl.value}))); box.appendChild(btn("Skip", () => dispatch({t:"skip"}), "ghost"));
+      box.appendChild(sl); box.appendChild(btn("Knock down", () => dispatch({t:"demolish", tile:+sl.value}))); startPickTimer(s, "demolish");
     } else if (k === "freebuild" || k === "forcebuy"){
       const free = k === "freebuild", opts = free ? freeBuildOptions(s, p) : forceSaleOptions(s, p); board.setSelectable(new Set(opts));
       tell(free ? "Free build. Pick one of your cities to grow by one level." : "Force sale. Pick a rival city to buy at its normal value.");
       const sl = document.createElement("select"); sl.setAttribute("aria-label", free ? "City to build in" : "City to buy");
       opts.forEach(j => { const st = s.own[j], o = document.createElement("option"); o.value = j;
         o.textContent = free ? `${TILES[j].name} · ${LEVEL_NAMES[st.l + 1]}` : `${TILES[j].name} · ${byId(s, st.o).name} · ${money(tileValue(j, st))}`; sl.appendChild(o); });
-      box.appendChild(sl); box.appendChild(btn(free ? "Build free" : "Buy", () => dispatch({t:k, tile:+sl.value}))); box.appendChild(btn("Skip", () => dispatch({t:"skip"}), "ghost"));
+      box.appendChild(sl); box.appendChild(btn(free ? "Build free" : "Buy", () => dispatch({t:k, tile:+sl.value}))); startPickTimer(s, k);
     } else {
       /* buy, build or buyout: the city card or the beach card opens by itself (syncPopup), so no buttons here */
     }
@@ -354,7 +369,8 @@ function scheduleBot(){
 const IDLE_MS = 45000, BOT_STALL_MS = 8000, STAGGER_MS = 3000, AUTO_FOLLOW_MS = 3000;   // AUTO_FOLLOW_MS: next choice in a turn already being auto-played
 function autoMove(s){
   const k = s.phase === "act" && s.pending ? s.pending.k : null;
-  if (k && ["buy", "upgrade", "takeover", "freebuild", "forcebuy", "demolish"].includes(k)) return {t:"skip"};
+  if (k && CHANCE_PICKS[k]){ const o = chanceOptions(s, s.players[s.turn], k); return o.length ? {t:k, tile:o[Math.floor(Math.random()*o.length)]} : {t:"skip"}; }
+  if (k && ["buy", "upgrade", "takeover"].includes(k)) return {t:"skip"};
   return botAction(s);
 }
 function idleLimit(s){ const cur = s.players[s.turn]; return cur.bot ? BOT_STALL_MS : s.autoFor === cur.id ? AUTO_FOLLOW_MS : IDLE_MS; }

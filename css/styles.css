@@ -305,3 +305,7 @@ body{margin:0;background:var(--stage);color:var(--ink);font-family:var(--body);f
 /* Host's Remove button in a corner panel, shown on phones too */
 .cp-act{padding:2px 10px 6px}
 .cp-act .mini{font-size:11px;padding:3px 8px}
+
+/* Countdown under a Chance pick (Free build, Force sale, Demolition) */
+.pick-timer{flex-basis:100%;text-align:center;font-weight:800;font-size:13px;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.5);font-variant-numeric:tabular-nums}
+.pick-timer.late{color:#ffd23f}

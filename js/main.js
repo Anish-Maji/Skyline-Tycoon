@@ -19,8 +19,14 @@ function setState(s, opts){
   applyLayout(s.layout);   // this game's city order and prices
   const prev = app.s; app.s = s; board.setState(s, opts);
   /* money animation for purchases and buyouts (not when loading a game) */
-  const tx = s.tx; if (tx && tx.seq !== app.lastTx){ if (prev && !(opts && opts.reset) && app.lastTx != null){ const ix = id => s.players.findIndex(p => p.id === id); board.moneyFly(ix(tx.from), tx.to ? ix(tx.to) : -1, tx.amt); } app.lastTx = tx.seq; }
-  if (opts && opts.reset) app.lastTx = tx ? tx.seq : 0;
+  /* Every payment since the last state gets its cash stack, one after another (s.txs keeps the last few) */
+  const seq = s.txSeq || (s.tx ? s.tx.seq : 0);
+  if ((opts && opts.reset) || !prev || app.lastTx == null) app.lastTx = seq;
+  else if (seq > app.lastTx){
+    const ix = id => id == null ? -1 : s.players.findIndex(p => p.id === id);
+    (s.txs || [s.tx]).filter(t => t && t.seq > app.lastTx).forEach(t => board.moneyFly(ix(t.from), ix(t.to), t.amt));
+    app.lastTx = seq;
+  }
   if (s.status === "playing" && s.rollId === 0 && (!prev || prev.status !== "playing")) board.celebrate(s.festivals);   // a new game begins: festival flags pop up
   if (s.status === "playing" || s.status === "over"){
     if (prev && s.rollId !== app.lastRoll && app.lastRoll !== -1){ sfx("dice"); const d1 = $("d1"), d2 = $("d2"); d1.classList.remove("roll"); d2.classList.remove("roll"); void d1.offsetWidth; d1.classList.add("roll"); d2.classList.add("roll"); }
@@ -44,7 +50,7 @@ function showCard(card, waited){
   /* Wait until the dice are gone and the character is standing on the Chance tile, then a short beat (CARD_AFTER_MS).
      The 15 s limit is only a safety net. */
   waited = waited || 0;
-  if (board.busy() && waited < 15000){ clearTimeout(cardT); cardT = setTimeout(() => showCard(card, waited + 100), 100); return; }
+  if (board.busy(true) && waited < 15000){ clearTimeout(cardT); cardT = setTimeout(() => showCard(card, waited + 100), 100); return; }
   if (!card.ready && waited < 15000){ card.ready = true; clearTimeout(cardT); cardT = setTimeout(() => showCard(card, waited + CARD_AFTER_MS), CARD_AFTER_MS); return; }
   const K = CARD_KINDS[card.kind] || {label:"Chance", color:"#f0582f"}, C = CARDS.find(x => x.id === card.id) || {};
   const el = $("card"), who = app.s && byId(app.s, card.pid);
@@ -58,6 +64,7 @@ function showCard(card, waited){
   sfx("card"); el.hidden = false; el.classList.remove("show"); void el.offsetWidth; el.classList.add("show");
   clearTimeout(cardT); cardT = setTimeout(hideCard, CARD_SHOW_MS);
 }
+board.holdMoney(() => cardOpen);   // a Chance card goes first, then the cash stack
 function hideCard(){ clearTimeout(cardT); $("card").hidden = true; if (cardOpen){ cardOpen = false; render(); scheduleBot(); } }
 $("card").onclick = hideCard;
 
@@ -96,7 +103,7 @@ function renderPlayers(){
     d.appendChild(av);
     const info = document.createElement("div"); info.className = "cp-info";
     info.innerHTML = `<div class="cp-name"></div><div class="cp-cash"></div><div class="cp-sub">${tag ? tag + " · " : ""}${props} ${props === 1 ? "property" : "properties"}${p.passes ? " · escape card" : ""}${p.shield ? " · shield" : ""}${p.taxFree ? " · tax free" : ""}${p.flight ? " · flight ready" : ""}${!p.laps && s.status === "playing" ? " · first lap" : ""}</div>`;
-    info.querySelector(".cp-name").textContent = p.name; info.querySelector(".cp-cash").textContent = p.bankrupt ? "Out" : moneyFull(p.cash);
+    info.querySelector(".cp-name").textContent = p.name; info.querySelector(".cp-cash").textContent = p.bankrupt ? "Out" : moneyFull(shownCash(idx));
     if (isHost() && s.status === "playing" && !p.bankrupt && p.id !== app.me){
       const b = document.createElement("button"); b.className = "mini"; b.textContent = "Remove";
       b.onclick = () => { if (b.dataset.confirm){ dispatch({t:"remove", pid:p.id}, true); } else { b.dataset.confirm = "1"; b.textContent = "Confirm remove"; setTimeout(() => { b.textContent = "Remove"; delete b.dataset.confirm; }, 3000); } };
@@ -106,6 +113,13 @@ function renderPlayers(){
   });
   fitCash();
 }
+/* The cash a corner panel shows: the real cash, minus money still on its way in, plus money that hasn't left yet.
+   So the payer's number drops when the cash stack starts moving, and the other player's goes up when it lands. */
+function shownCash(idx){ const p = app.s.players[idx]; return p.cash + board.cashPending(idx); }
+let shownKey = "";
+setInterval(() => { const s = app.s; if (!s || !s.players) return; const v = s.players.map((p, i) => p.bankrupt ? "Out" : moneyFull(shownCash(i)));
+  const key = v.join("|"); if (key === shownKey) return; shownKey = key;
+  document.querySelectorAll("#players .cp-cash").forEach((e, i) => { if (v[i] != null) e.textContent = v[i]; }); fitCash(); }, 100);
 /* Full amounts can get long: shrink a corner panel's cash text until it fits */
 function fitCash(){ document.querySelectorAll(".cp-cash").forEach(e => { e.style.fontSize = ""; let f = parseFloat(getComputedStyle(e).fontSize); while (e.scrollWidth > e.clientWidth && f > 9){ f -= 1; e.style.fontSize = f + "px"; } }); }
 addEventListener("resize", fitCash);

@@ -66,7 +66,9 @@ function upgradeOptions(s, p, i){
   return opts;
 }
 /* Records a payment for the money animation: from a player to another player, or to the bank (to = null) */
-function txn(s, fromId, toId, amt){ s.txSeq = (s.txSeq || 0) + 1; s.tx = {from:fromId, to:toId, amt, seq:s.txSeq}; }
+/* from = null means the bank pays (a bonus). Several payments can happen in one move, so the last few are kept in s.txs. */
+function txn(s, fromId, toId, amt){ if (!(amt > 0)) return; s.txSeq = (s.txSeq || 0) + 1; s.tx = {from:fromId, to:toId, amt, seq:s.txSeq};
+  s.txs = (s.txs || []).concat([s.tx]).slice(-8); }
 function setMove(s, p, kind, from, to){ s.moveSeq = (s.moveSeq||0) + 1; s.lastMove = {pid:p.id, kind, from, to, seq:s.moveSeq}; }
 function walk(s, p, n){ const from = p.pos, to = (from + n) % N; if (to < from) passStart(s, p); p.pos = to; setMove(s, p, "walk", from, to); }
 function jumpTo(s, p, to, viaStart){ const from = p.pos; if (viaStart && to < from) passStart(s, p); p.pos = to; setMove(s, p, "jump", from, to); }
@@ -90,6 +92,7 @@ function pay(s, from, to, amt){
   if (from.cash < amt) liquidate(s, from, amt);
   const actual = Math.min(amt, from.cash); from.cash -= actual; if (to) to.cash += actual;
   if (actual < amt) bankrupt(s, from);
+  return actual;
 }
 /* ---------- Debts ----------
    charge() is how the current player pays rent, tax, fines and the boat off Lost Island. If a human player can't cover it
@@ -103,7 +106,7 @@ function charge(s, p, to, amt, why, msg, after){
     s.phase = "act"; s.pending = {k:"debt", amt, to:to ? to.id : null, why, msg, after:after || {k:"finish"}};
     say(s, `${p.name} needs ${money(amt)} but only has ${money(p.cash)}.`); return false;
   }
-  say(s, msg); pay(s, p, to, amt); if (to ? !p.bankrupt : BANK_ANIM[why]) txn(s, p.id, to ? to.id : null, amt); return true;
+  say(s, msg); const got = pay(s, p, to, amt); if (to || BANK_ANIM[why]) txn(s, p.id, to ? to.id : null, got); return true;
 }
 /* Pays the debt once there is enough cash, then carries on with the turn. Returns false if still short. */
 function settleDebt(s, p){
@@ -115,7 +118,7 @@ function settleDebt(s, p){
 /* Gives up: the creditor gets whatever cash is left and the properties go back to the market */
 function giveUp(s, p){
   const d = s.pending, to = d && d.to ? byId(s, d.to) : null; s.pending = null;
-  if (to) to.cash += p.cash; bankrupt(s, p); finish(s);
+  if (to){ to.cash += p.cash; txn(s, p.id, to.id, p.cash); } bankrupt(s, p); finish(s);
 }
 function win(s, p, reason){ s.status = "over"; s.phase = "over"; s.winner = p ? p.id : null; s.winReason = reason; s.pending = null; if (p) say(s, `${p.name} wins. ${reason}.`); }
 function checkWin(s){
@@ -202,8 +205,8 @@ function drawCard(s, p){
     case "taxfree": p.taxFree = true; return finish(s);
     case "pass": p.passes = (p.passes || 0) + 1; return finish(s);
     case "forward": walk(s, p, 4); return resolve(s, p);
-    case "bonus": p.cash += 150; return finish(s);
-    case "bday": s.players.forEach(o => { if (o !== p && !o.bankrupt) pay(s, o, p, 30); }); return finish(s);
+    case "bonus": p.cash += 150; txn(s, null, p.id, 150); return finish(s);
+    case "bday": s.players.forEach(o => { if (o !== p && !o.bankrupt) txn(s, o.id, p.id, pay(s, o, p, 30)); }); return finish(s);
     case "jail": if (!shielded(s, p, "trip to Lost Island")) sendJail(s, p); return finish(s);
     case "quake": {
       const hit = Object.keys(s.own).map(Number).filter(i => TILES[i].type === "city" && s.own[i].l >= 2 && s.own[i].l <= 4);

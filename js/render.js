@@ -170,7 +170,7 @@ const board = (() => {
     const c = P(S*HUB_AT, S*HUB_AT); const hub = document.getElementById("hub"); hub.style.left = c[0] + "px"; hub.style.top = c[1] + "px";
   }
   function setState(s, opts){
-    const first = !state || (opts && opts.reset); state = s;
+    const first = !state || (opts && opts.reset); state = s; if (opts && opts.reset){ flights.length = 0; moneyCount = null; }
     let walkAt = performance.now();
     if (first){ lastRollId = s.rollId; diceRest(s); }
     else if (s.rollId !== lastRollId){ lastRollId = s.rollId; throwDice(s); walkAt += reduce.matches ? 0 : DICE_TOTAL; }
@@ -247,8 +247,9 @@ const board = (() => {
   }
   /* Busy while anything is still playing out: walking, dice, a cash stack in the air or a building popping up.
      Buttons, popups and bots wait for it. */
-  function busy(){ const now = performance.now(); return Object.values(disp).some(d => d.path) || now < diceUntil
-    || flights.some(f => now < f.t0 + (f.dur || MONEY_FLY_MS)) || Object.values(buildPop).some(b => now < b.t + BUILD_POP_MS); }
+  /* noMoney: ignore cash stacks still waiting (the Chance card shows first, then the money) */
+  function busy(noMoney){ const now = performance.now(); return Object.values(disp).some(d => d.path) || now < diceUntil
+    || (!noMoney && flights.some(f => now < f.t0 + (f.dur || MONEY_FLY_MS))) || Object.values(buildPop).some(b => now < b.t + BUILD_POP_MS); }
   const OFFS = [[-.2,-.14],[.18,-.16],[-.14,.16],[.2,.12]];
   /* Height of a tile's top right now: tiles with someone on them rest a little lower, and dip when a character lands. */
   const pressT = {}; let occupied = new Set();
@@ -386,7 +387,7 @@ const board = (() => {
     /* standing things, painter sorted */
     const items = [];
     state.players.forEach((p, idx) => { const pile = PILES[idx]; if (!pile || p.bankrupt) return; const d = disp[p.id]; if (!d) return;
-      d.cash = d.cash == null ? p.cash : d.cash + (p.cash - d.cash)*.06; if (Math.abs(p.cash - d.cash) < 1) d.cash = p.cash;
+      const target = p.cash + cashPending(idx); d.cash = d.cash == null ? target : d.cash + (target - d.cash)*.06; if (Math.abs(target - d.cash) < 1) d.cash = target;
       items.push({dep:pile.X + pile.Y + 1, f:() => moneyPile(pile.X, pile.Y, d.cash)}); });
     SCENERY.forEach(o => items.push({dep:o.X + o.Y, f:() => o.k === "pine" ? pine(o.X, o.Y, o.s) : o.k === "palm" ? palm(o.X, o.Y, o.s) : bush(o.X, o.Y, o.s)}));
     cornerProps(items);
@@ -442,15 +443,28 @@ const board = (() => {
      MONEY_FLY_MS is the whole trip. */
   const MONEY_FLY_MS = 1800;
   const pileCenter = idx => { const p = PILES[idx]; return p ? [p.X + .8, p.Y + .5] : [S/2, S/2]; };
+  /* Payments play one at a time, in order. Each waits for the walk, the dice and any Chance card in the middle. */
+  const FLIGHT_GAP = 250;
+  function cashPending(idx){ const now = performance.now(); let a = 0;
+    flights.forEach(f => { const end = f.t0 + (f.dur || MONEY_FLY_MS); if (f.from === idx && !f.started) a += f.amt; if (f.to === idx && (!f.started || now < end)) a -= f.amt; }); return a; }
+  let moneyHold = () => false;
   function drawFlights(now){
-    for (let k = flights.length - 1; k >= 0; k--){
-      const f = flights[k];
-      if (!f.started){ if (Object.values(disp).some(d => d.path) || now < diceUntil){ f.t0 = now + 250; if (moneyCount && moneyCount.f === f) moneyCount.t0 = f.t0; continue; } f.started = true; }
-      const t = (now - f.t0)/(f.dur || MONEY_FLY_MS); if (t >= 1){ flights.splice(k, 1); continue; } if (t < 0) continue;
-      const a = pileCenter(f.from), mid = [S/2, S/2]   /* the center of the board */, b = f.to == null ? mid : pileCenter(f.to);
+    for (let k = flights.length - 1; k >= 0; k--){ const f = flights[k]; if (f.started && now >= f.t0 + (f.dur || MONEY_FLY_MS)) flights.splice(k, 1); }
+    const f = flights[0]; if (!f) return;
+    if (!f.started){
+      if (Object.values(disp).some(d => d.path) || now < diceUntil || moneyHold()){ f.t0 = now + FLIGHT_GAP; return; }
+      if (now < f.t0) return;
+      f.started = true; f.t0 = now; moneyCount = {amt:f.amt, t0:now, dur:f.dur || MONEY_FLY_MS, f};
+    }
+    const t = (now - f.t0)/(f.dur || MONEY_FLY_MS); if (t < 0 || t >= 1) return;
+    {
+      const mid = [S/2, S/2]   /* the center of the board */, a = f.from == null ? mid : pileCenter(f.from), b = f.to == null ? mid : pileCenter(f.to);
       const ease = u => u < .5 ? 2*u*u : 1 - Math.pow(-2*u + 2, 2)/2;
       let X, Y, z, alpha;
-      if (f.to == null){   // to the bank: in, slide to the middle, hold, fade out
+      if (f.from == null){ // from the bank: appears in the middle, slides to the player's pile
+        const u = ease(Math.min(1, Math.max(0, (t - .15)/.85))); X = a[0] + (b[0] - a[0])*u; Y = a[1] + (b[1] - a[1])*u; z = .3 + Math.sin(Math.PI*u)*.9;
+        alpha = t < .15 ? t/.15 : t > .85 ? Math.max(0, 1 - (t - .85)/.15) : 1;
+      } else if (f.to == null){   // to the bank: in, slide to the middle, hold, fade out
         const u = ease(Math.min(1, t/.55)); X = a[0] + (mid[0] - a[0])*u; Y = a[1] + (mid[1] - a[1])*u; z = .3 + Math.sin(Math.PI*u)*.9 + (t > .55 ? (t - .55)*.8 : 0);
         alpha = t < .12 ? t/.12 : t > .7 ? Math.max(0, 1 - (t - .7)/.3) : 1;
       } else {             // to a player: payer to the middle, then on to the other pile
@@ -621,7 +635,10 @@ const board = (() => {
     /* Text for the thinking bubble over the current player, or null to hide it */
     think(t){ thought = t || null; },
     /* Fly a cash stack from seat "from" to seat "to" (null = the bank, in the middle of the board) */
-    moneyFly(from, to, amt, dur){ if (from < 0) return; const t0 = performance.now() + 320, f = {from, to:to < 0 ? null : to, t0, dur}; flights.push(f); moneyCount = {amt, t0, dur:dur || MONEY_FLY_MS, f}; }, onClick(f){ clickCb = f; }, onIdle(f){ onBusyEnd = f; } };
+    moneyFly(from, to, amt, dur){ if (from < 0 && to < 0) return; flights.push({from:from < 0 ? null : from, to:to < 0 ? null : to, amt, t0:performance.now() + 320, dur}); },
+    /* Money still on its way for seat idx: + what it hasn't paid out yet, - what it hasn't received yet */
+    cashPending,
+    holdMoney(fn){ moneyHold = fn; }, onClick(f){ clickCb = f; }, onIdle(f){ onBusyEnd = f; } };
 })();
 
 /* mini illustration for the build cards */

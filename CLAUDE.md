@@ -77,7 +77,7 @@ To check rules changes, run a headless bot simulation with Node: concatenate `co
 
 ## Money piles
 
-Purchases, builds, buyouts, taxes and fines record `s.tx` (`txn()` in `engine.js`; bank payments that animate are listed in `BANK_ANIM`). A payment made on landing waits until the walk is over. `setState` then calls `board.moneyFly()`, and `drawFlights` in `render.js` slides a cash stack with the amount from the payer's pile to the middle (bank) or through the middle to the other player's pile (`MONEY_FLY_MS`).
+Purchases, builds, buyouts, rent, taxes, fines, the Bonus and Anniversary cards and bankruptcy payouts record payments with `txn()` in `engine.js` (`s.tx` is the last one, `s.txs` the last 8, `s.txSeq` counts them; bank payments that animate are listed in `BANK_ANIM`; `from: null` is the bank paying). `setState` in main.js plays every new one in order, one at a time, and a stack waits while a Chance card is open (`board.holdMoney`). The corner panels and money piles show `shownCash`, which is real cash plus `board.cashPending(idx)`: the payer's cash drops when its stack starts moving and the receiver's goes up when it lands. A payment made on landing waits until the walk is over. `setState` then calls `board.moneyFly()`, and `drawFlights` in `render.js` slides a cash stack with the amount from the payer's pile to the middle (bank) or through the middle to the other player's pile (`MONEY_FLY_MS`).
 
 Each seat has a money pile next to its corner panel (`PILES` in `render.js`). `moneyPile()` draws about one brick per ₹50K and eases toward the player's cash, so it grows and shrinks as money changes. Bankrupt players lose their pile.
 

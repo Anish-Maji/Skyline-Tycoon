@@ -10,6 +10,9 @@ function toast(m){ const t = $("toast"); t.textContent = m; t.hidden = false; cl
 const PIPS = {1:[4],2:[0,8],3:[0,4,8],4:[0,2,6,8],5:[0,2,4,6,8],6:[0,2,3,5,6,8]};
 function setDie(el, v){ el.innerHTML = ""; for (let k = 0; k < 9; k++){ const i = document.createElement("i"); if (PIPS[v].includes(k)) i.className = "on"; el.appendChild(i); } }
 function isHost(){ return app.mode === "online" && app.s && app.s.host === app.me; }
+/* Online, one browser plays the bots: the host's, or if the host has left, the first player still in the game */
+function activeHumans(s){ return s.players.filter(p => !p.bot && !p.bankrupt && !p.left); }
+function isDriver(){ if (app.mode !== "online" || !app.s) return false; const h = activeHumans(app.s); const host = h.find(p => p.id === app.s.host); return (host || h[0] || {}).id === app.me; }
 function canControl(p){ if (!p || app.s.status !== "playing") return false; if (app.mode === "offline") return !p.bot; return !app.readOnly && p.id === app.me && !p.bot; }
 
 function setState(s, opts){
@@ -58,11 +61,14 @@ function showCard(card, waited){
 function hideCard(){ clearTimeout(cardT); $("card").hidden = true; if (cardOpen){ cardOpen = false; render(); scheduleBot(); } }
 $("card").onclick = hideCard;
 
+/* " · auto move in 12s" when an online player is about to run out of time */
+function turnClock(s){ if (app.mode !== "online" || s.status !== "playing") return ""; const left = idleLeft(s); return left != null && left < 15000 ? ` · auto move in ${Math.max(0, Math.ceil(left/1000))}s` : ""; }
+setInterval(() => { if (app.mode === "online" && app.s && app.s.status === "playing") { const s = app.s, cur = s.players[s.turn]; $("turnline").textContent = `${cur.name}'s turn${cur.jail ? " · on Lost Island" : ""}${turnClock(s)}`; } }, 1000);
 function render(){
   const s = app.s; if (!s) return;
   setDie($("d1"), s.dice[0]); setDie($("d2"), s.dice[1]); $("d1").parentNode.setAttribute("aria-label", `Dice: ${s.dice[0]} and ${s.dice[1]}`);
   const cur = s.players[s.turn];
-  $("turnline").textContent = s.status === "demo" ? "Demo board" : s.status === "over" ? "Game over" : s.status === "lobby" ? "Waiting in lobby" : `${cur.name}'s turn${cur.jail ? " · on Lost Island" : ""}`;
+  $("turnline").textContent = s.status === "demo" ? "Demo board" : s.status === "over" ? "Game over" : s.status === "lobby" ? "Waiting in lobby" : `${cur.name}'s turn${cur.jail ? " · on Lost Island" : ""}${turnClock(s)}`;
   renderPlayers(); renderActions(); syncPopup(); board.think(thinkingText(s));
   $("roomChip").hidden = app.mode !== "online"; if (app.mode === "online") $("roomChip").textContent = "Room " + app.code;
   if (s.status === "over" && app.mode) showOver();
@@ -94,7 +100,7 @@ function renderPlayers(){
     if (isHost() && s.status === "playing" && !p.bankrupt && p.id !== app.me){
       const b = document.createElement("button"); b.className = "mini"; b.textContent = "Remove";
       b.onclick = () => { if (b.dataset.confirm){ dispatch({t:"remove", pid:p.id}, true); } else { b.dataset.confirm = "1"; b.textContent = "Confirm remove"; setTimeout(() => { b.textContent = "Remove"; delete b.dataset.confirm; }, 3000); } };
-      info.querySelector(".cp-sub").append(" ", b);
+      const row = document.createElement("div"); row.className = "cp-act"; row.appendChild(b); info.appendChild(row);
     }
     d.appendChild(info); box.appendChild(d);
   });
@@ -324,7 +330,7 @@ const BOT_THINK_MS = 1700;   // how long a bot "thinks" over a decision, so its 
 function scheduleBot(){
   const s = app.s; if (!s || s.status !== "playing") return;
   const p = s.players[s.turn]; if (!p.bot) return;
-  if (app.mode === "online" && !isHost()) return;
+  if (app.mode === "online" && !isDriver()) return;
   if (app.mode !== "online" && app.mode !== "offline") return;
   const key = s.rev + ":" + s.turn; if (botKey === key) return; botKey = key; clearTimeout(botTimer);
   botTimer = setTimeout(function tick(){
@@ -333,6 +339,28 @@ function scheduleBot(){
     botKey = null; dispatch(botAction(app.s), true);
   }, s.phase === "act" || s.phase === "fly" ? BOT_THINK_MS : 850);
 }
+/* ---------- Idle watchdog (online) ----------
+   If the current player doesn't move for IDLE_MS (closed the tab, lost connection), the other players' games make a
+   safe automatic move for them: roll, pass on buying, sell automatically if they owe money. After MISSED_TURNS_FOR_BOT
+   missed turns a bot takes their seat. If the bots stop because the browser playing them is gone, another player's game
+   takes over after BOT_STALL_MS. Each player waits a little longer than the one before, so only one of them steps in. */
+const IDLE_MS = 45000, BOT_STALL_MS = 8000, STAGGER_MS = 3000, AUTO_FOLLOW_MS = 3000;   // AUTO_FOLLOW_MS: next choice in a turn already being auto-played
+function autoMove(s){
+  const k = s.phase === "act" && s.pending ? s.pending.k : null;
+  if (k && ["buy", "upgrade", "takeover", "freebuild", "forcebuy"].includes(k)) return {t:"skip"};
+  return botAction(s);
+}
+function idleLimit(s){ const cur = s.players[s.turn]; return cur.bot ? BOT_STALL_MS : s.autoFor === cur.id ? AUTO_FOLLOW_MS : IDLE_MS; }
+function idleLeft(s){ const cur = s.players[s.turn]; return cur.bot ? null : idleLimit(s) - (Date.now() - (s.moveAt || Date.now())); }
+setInterval(function watchdog(){
+  const s = app.s; if (app.mode !== "online" || !s || s.status !== "playing" || app.writing || app.readOnly) return;
+  if (board.busy() || cardBusy()) return;
+  const cur = s.players[s.turn], humans = activeHumans(s), rank = humans.findIndex(p => p.id === app.me);
+  if (rank < 0 || cur.id === app.me) return;                       // only players still in the game, never for my own turn
+  const idle = Date.now() - (s.moveAt || Date.now()), limit = idleLimit(s) + rank*STAGGER_MS;
+  if (idle < limit) return;
+  dispatch(cur.bot ? botAction(s) : Object.assign(autoMove(s), {auto:true}), true);   // stalled bot: play it; idle player: safe move
+}, 1000);
 function saveOffline(){ if (app.mode === "offline" && app.s) store("skyline.offline", app.s.status === "playing" ? JSON.stringify(Object.assign({}, app.s, {savedAt:Date.now()})) : null); }
 addEventListener("pagehide", saveOffline);
 
@@ -665,6 +693,15 @@ function showOver(){
   $("winName").textContent = w ? `${w.name} wins` : "Game over"; $("winWhy").textContent = s.winReason || "";
   $("againBtn").onclick = leaveGame; $("viewBtn").onclick = () => { closeSheet(); $("overlay").dataset.view = "over-seen"; };
 }
+/* Leave from the menu. In a running online game your seat goes to a bot first, so nobody gets stuck waiting for you. */
+async function quitOnline(){
+  const s = app.s;
+  if (app.mode === "online" && s && s.status === "playing" && s.players.some(p => p.id === app.me && !p.left && !p.bankrupt)){
+    const q = $("quitBtn"); if (!q.dataset.confirm){ q.dataset.confirm = "1"; q.textContent = "Tap again to leave"; return; }
+    await dispatch({t:"leave", pid:app.me}, true);
+  }
+  leaveGame();
+}
 function leaveGame(){
   hideCard();
   saveOffline();
@@ -672,7 +709,7 @@ function leaveGame(){
   setState(demoState(), {reset:true}); showHome();
 }
 $("menuBtn").onclick = () => { if (app.mode === "online" && app.s && app.s.status === "lobby"){ showLobby(); return; }
-  if (app.mode){ $("overlay").dataset.view = "menu"; openSheet(`<h1 style="font-size:24px">Menu</h1><p class="lede">${app.mode === "online" ? "Leaving keeps the room open. You can rejoin with code " + esc(app.code) + "." : "Your offline game is saved on this device."}</p>${rulesHtml(app.s && app.s.rules)}<div class="btns"><button class="btn" id="resBtn">Keep playing</button><button class="btn ghost" id="quitBtn">Leave game</button></div>`); $("resBtn").onclick = closeSheet; $("quitBtn").onclick = leaveGame; }
+  if (app.mode){ $("overlay").dataset.view = "menu"; openSheet(`<h1 style="font-size:24px">Menu</h1><p class="lede">${app.mode === "online" ? (app.s && app.s.status === "playing" && app.s.players.some(p => p.id === app.me && !p.left && !p.bankrupt) ? "If you leave, a bot takes over your seat and the game carries on for everyone else." : "You can rejoin with code " + esc(app.code) + ".") : "Your offline game is saved on this device."}</p>${rulesHtml(app.s && app.s.rules)}<div class="btns"><button class="btn" id="resBtn">Keep playing</button><button class="btn ghost" id="quitBtn">Leave game</button></div>`); $("resBtn").onclick = closeSheet; $("quitBtn").onclick = quitOnline; }
   else showHome(); };
 $("musicBtn").onclick = () => { setMusic(!audio.music); $("musicBtn").setAttribute("aria-pressed", String(audio.music)); };
 $("sfxBtn").onclick = () => { audio.sfx = !audio.sfx; if (audio.sfx) ensureAudio(); $("sfxBtn").setAttribute("aria-pressed", String(audio.sfx)); };

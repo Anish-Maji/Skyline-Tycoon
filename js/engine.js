@@ -103,12 +103,12 @@ function charge(s, p, to, amt, why, msg, after){
     s.phase = "act"; s.pending = {k:"debt", amt, to:to ? to.id : null, why, msg, after:after || {k:"finish"}};
     say(s, `${p.name} needs ${money(amt)} but only has ${money(p.cash)}.`); return false;
   }
-  say(s, msg); pay(s, p, to, amt); if (!to && BANK_ANIM[why]) txn(s, p.id, null, amt); return true;
+  say(s, msg); pay(s, p, to, amt); if (to ? !p.bankrupt : BANK_ANIM[why]) txn(s, p.id, to ? to.id : null, amt); return true;
 }
 /* Pays the debt once there is enough cash, then carries on with the turn. Returns false if still short. */
 function settleDebt(s, p){
   const d = s.pending; if (p.cash < d.amt) return false;
-  say(s, d.msg); pay(s, p, d.to ? byId(s, d.to) : null, d.amt); if (!d.to && BANK_ANIM[d.why]) txn(s, p.id, null, d.amt); s.pending = null;
+  say(s, d.msg); pay(s, p, d.to ? byId(s, d.to) : null, d.amt); if (d.to || BANK_ANIM[d.why]) txn(s, p.id, d.to || null, d.amt); s.pending = null;
   if (d.after.k === "walk"){ s.phase = "roll"; walk(s, p, d.after.n); resolve(s, p); } else finish(s);
   return true;
 }
@@ -142,8 +142,11 @@ function endOnTime(s){
   say(s, "Time's up."); win(s, best, `Time's up. Richest tycoon with ${money(netWorth(s, best))}`);
 }
 /* Applies the Quick settings when a game starts: starting cash, festivals and the play clock */
+/* Hands a player's seat to a bot (they left or kept missing turns). Their cities and money stay in the game. */
+const MISSED_TURNS_FOR_BOT = 2;
+function handOver(s, p, msg){ p.bot = true; p.left = true; p.missed = 0; say(s, msg); }
 function startGame(s){
-  const R = rules(s); s.rules = R; applyLayout(s.layout);
+  const R = rules(s); s.rules = R; applyLayout(s.layout); s.moveAt = Date.now();
   s.players.forEach(p => { p.cash = R.startCash; });
   pickFestivals(s); s.endsAt = R.playTime ? Date.now() + R.playTime*60000 : null;
 }
@@ -265,6 +268,13 @@ function act(s0, a){
   const s = clone(s0); s.card = null;
   const p = s.players[s.turn];
   const E = m => ({err:m});
+  /* Online, if a player doesn't move for a while, another player's game moves for them (a.auto).
+     Two missed turns in a row and a bot takes over their seat. Any move of their own resets the count. */
+  if (a.t !== "leave") s.autoFor = a.auto ? p.id : null;   // the rest of a missed turn plays out quickly
+  if (a.t !== "leave"){
+    if (a.auto && !p.bot){ if (s.phase === "roll" || s.phase === "fly"){ p.missed = (p.missed || 0) + 1; if (p.missed >= MISSED_TURNS_FOR_BOT) handOver(s, p, `${p.name} missed ${MISSED_TURNS_FOR_BOT} turns. A bot took over.`); } }
+    else if (!a.auto && !p.bot) p.missed = 0;
+  }
   switch (a.t){
     case "roll": {
       if (s.phase !== "roll") return E("It's not time to roll.");
@@ -360,6 +370,10 @@ function act(s0, a){
     case "skip":
       if (s.phase !== "act" || (s.pending && s.pending.k === "debt")) return E("Nothing to skip.");
       finish(s); break;
+    case "leave": {   // a player leaves an online game: a bot plays their seat from now on
+      const tgt = byId(s, a.pid); if (!tgt || tgt.bankrupt || tgt.left) return E("That player has already left.");
+      handOver(s, tgt, `${tgt.name} left. A bot took over.`); break;
+    }
     case "remove": {
       const tgt = byId(s, a.pid); if (!tgt || tgt.bankrupt) return E("That player is already out.");
       const wasTurn = s.players[s.turn] === tgt; say(s, `${tgt.name} was removed from the game.`); bankrupt(s, tgt);
@@ -367,7 +381,7 @@ function act(s0, a){
     }
     default: return E("Unknown move.");
   }
-  s.rev = (s.rev||0) + 1;
+  s.rev = (s.rev||0) + 1; s.moveAt = Date.now();   // moveAt: when the last move happened, for the idle check online
   return {s};
 }
 function botAction(s){

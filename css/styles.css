@@ -301,3 +301,7 @@ body{margin:0;background:var(--stage);color:var(--ink);font-family:var(--body);f
 .bp-row b{font-weight:900}
 .bp-row.on{background:var(--accent-soft);border-radius:8px;box-shadow:inset 4px 0 0 var(--good)}
 @media (max-width:560px){.bpanel{grid-template-columns:1fr;gap:10px}.bp-art canvas{max-width:200px}}
+
+/* Host's Remove button in a corner panel, shown on phones too */
+.cp-act{padding:2px 10px 6px}
+.cp-act .mini{font-size:11px;padding:3px 8px}

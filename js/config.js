@@ -33,12 +33,12 @@ const SHARE_URL = "https://claude.ai/artifact/3iTp5tUrE5zy2dEtF1kwVr";
    Firebase web keys are meant to be public; the Firestore security rules are what protect the data.
    Leave apiKey empty to keep online rooms off. See js/net.js. */
 const FIREBASE_CONFIG = {
-  apiKey: "",
-  authDomain: "",
-  projectId: "",
-  storageBucket: "",
-  messagingSenderId: "",
-  appId: ""
+  apiKey: "AIzaSyDrTNC1aL7SAJ4fE4YWsj7oidfSoslBjWU",
+  authDomain: "skyline-tycoon.firebaseapp.com",
+  projectId: "skyline-tycoon",
+  storageBucket: "skyline-tycoon.firebasestorage.app",
+  messagingSenderId: "781033820835",
+  appId: "1:781033820835:web:47d7ba737c62110fb26516"
 };
 const PCOLORS = ["#e5484d", "#2f7fe0", "#e9a514", "#25a86a"];
 /* ================= REGIONS =================

@@ -43,12 +43,24 @@ function house(cx, cy, s, wall, roof){
   poly([P(X+w, Y, h), P(X+w, Y+d, h), P(X+w, Y+d/2, r)], shade(wall, -.3));
   poly([P(X-ov, Y+d+ov, h), P(X+w+ov, Y+d+ov, h), P(X+w+ov, Y+d/2, r), P(X-ov, Y+d/2, r)], roof);
 }
-function tower(cx, cy, s, col){
-  const w = s, X = cx - w/2, Y = cy - w/2, h = s*3;
-  box3(X, Y, w, w, h, col);
-  for (let f = 1; f < 6; f++){ const z = h*f/6; poly([P(X+w, Y+w*.15, z), P(X+w, Y+w*.85, z), P(X+w, Y+w*.85, z+h*.07), P(X+w, Y+w*.15, z+h*.07)], "rgba(220,240,255,.85)"); poly([P(X+w*.15, Y+w, z), P(X+w*.85, Y+w, z), P(X+w*.85, Y+w, z+h*.07), P(X+w*.15, Y+w, z+h*.07)], "rgba(220,240,255,.7)"); }
-  box3(X + w*.2, Y + w*.2, w*.6, w*.6, s*.35, "#f2b51c", h);
-  const a = P(cx, cy, h + s*.35), b = P(cx, cy, h + s*1.1); const c = V.ctx; c.strokeStyle = "#f2b51c"; c.lineWidth = Math.max(1.5, V.k*.04); c.beginPath(); c.moveTo(a[0], a[1]); c.lineTo(b[0], b[1]); c.stroke();
+/* The Hotel, the top level: a tall cream block with rows of lit windows, a roof slab and an entrance canopy
+   in the owner's color, and a HOTEL sign on the roof. (cx, cy) is the middle of its footprint, s its width. */
+function hotel(cx, cy, s, col){
+  const w = s, X = cx - w/2, Y = cy - w/2, h = s*2.6, floors = 5, c = V.ctx;
+  box3(X, Y, w, w, h, "#f6efe2");
+  for (let f = 0; f < floors; f++){ const z = h*(.12 + f*.16), wh = h*.08;
+    for (let k = 0; k < 3; k++){ const a = .12 + k*.28, b = a + .2;
+      poly([P(X+w, Y+w*a, z), P(X+w, Y+w*b, z), P(X+w, Y+w*b, z+wh), P(X+w, Y+w*a, z+wh)], f === 0 && k === 1 ? shade(col, -.35) : "#ffd77a");
+      if (!(f === 0 && k === 1)) poly([P(X+w*a, Y+w, z), P(X+w*b, Y+w, z), P(X+w*b, Y+w, z+wh), P(X+w*a, Y+w, z+wh)], "#ffe7a8"); } }
+  /* entrance canopy over the front door */
+  box3(X + w*.25, Y + w, w*.5, w*.18, s*.06, col, h*.2);
+  poly([P(X + w*.38, Y + w, 0), P(X + w*.62, Y + w, 0), P(X + w*.62, Y + w, h*.19), P(X + w*.38, Y + w, h*.19)], shade(col, -.35));
+  /* roof slab and the sign */
+  box3(X - s*.04, Y - s*.04, w + s*.08, w + s*.08, s*.1, col, h);
+  const top = P(cx, cy, h + s*.1), sw = Math.max(18, V.k*s*1.25), sh = Math.max(7, V.k*s*.34), sy = top[1] - sh*1.05;
+  c.fillStyle = "#5b4636"; c.fillRect(top[0] - sw*.3, sy + sh, Math.max(1, V.k*.02), sh*.6); c.fillRect(top[0] + sw*.3, sy + sh, Math.max(1, V.k*.02), sh*.6);
+  c.fillStyle = shade(col, -.3); c.beginPath(); if (c.roundRect) c.roundRect(top[0] - sw/2, sy, sw, sh, sh*.25); else c.rect(top[0] - sw/2, sy, sw, sh); c.fill();
+  c.fillStyle = "#fff6d8"; c.font = `900 ${sh*.78}px Figtree, sans-serif`; c.textAlign = "center"; c.textBaseline = "middle"; c.fillText("HOTEL", top[0], sy + sh*.55);
 }
 function flag(X, Y, col, hgt){ const c = V.ctx, a = P(X, Y, 0), b = P(X, Y, hgt || .6);
   c.strokeStyle = "#5b4636"; c.lineWidth = Math.max(1.5, V.k*.035); c.beginPath(); c.moveTo(a[0], a[1]); c.lineTo(b[0], b[1]); c.stroke();
@@ -64,7 +76,7 @@ function building(level, X, Y, col, along){
     box3(X - .17 - ax[0]*.22, Y - .17 - ax[1]*.22, .34, .34, .62, "#f2efe8"); poly([P(X - .17 - ax[0]*.22 + .34, Y - ax[1]*.22 - .1, .3), P(X - .17 - ax[0]*.22 + .34, Y - ax[1]*.22 + .1, .3), P(X - .17 - ax[0]*.22 + .34, Y - ax[1]*.22 + .1, .5), P(X - .17 - ax[0]*.22 + .34, Y - ax[1]*.22 - .1, .5)], col);
     house(X + ax[0]*.22, Y + ax[1]*.22, .3, "#fffaf2", col); return;
   }
-  tower(X, Y, .34, col);
+  hotel(X, Y, .42, col);
 }
 function pine(X, Y, s){ { const [sx, sy] = P(X, Y); if (drawAsset("props", "pine", sx, sy, V.k*ASSET_HEIGHTS.props.pine*s)) return; } const c = V.ctx; box3(X - .04*s, Y - .04*s, .08*s, .08*s, .18*s, "#7a5232");
   for (let k = 0; k < 3; k++){ const z = .14*s + k*.2*s, r = (.32 - k*.08)*s; const base = P(X, Y, z), top = P(X, Y, z + .38*s);
@@ -302,7 +314,6 @@ const board = (() => {
       const foam = sub(T, .28, .34); rect3(foam.X0, foam.Y0, foam.X1, foam.Y1, .003, "#e8f7fd");
       for (let k = 0; k < 2; k++){ const p0 = along(r, .07 + k*.11); const ends = e === "X" ? [[p0[0] - .3, p0[1]], [p0[0] + .3, p0[1]]] : [[p0[0], p0[1] - .3], [p0[0], p0[1] + .3]];
         const p1 = P(ends[0][0], ends[0][1], .004), p2 = P(ends[1][0], ends[1][1], .004); V.ctx.strokeStyle = "rgba(255,255,255,.75)"; V.ctx.lineWidth = Math.max(1, V.k*.03); V.ctx.beginPath(); V.ctx.moveTo(p1[0], p1[1]); V.ctx.quadraticCurveTo((p1[0]+p2[0])/2, (p1[1]+p2[1])/2 - V.k*.06, p2[0], p2[1]); V.ctx.stroke(); }
-      if (st) rect3(T.X0, T.Y0, T.X1, T.Y1, .004, null, byId(state, st.o).color, Math.max(2, V.k*.07));
       const nc = along(r, .62); const bn = V.k < 30 ? t.code : t.name.replace(" Beach", "").toUpperCase(); ptext(nc[0], nc[1], e, bn, fitSize(bn, V.k < 30 ? .26 : .19), 900, "#7a5521", .84);
     } else if (t.type === "fortune"){
       const c0 = along(r, .45), rad = .32, cols = ["#e5484d","#f2b51c","#25a86a","#2f7fe0","#d4468c","#f0832a"], rot = now/2400;
@@ -323,17 +334,15 @@ const board = (() => {
         V.ctx.strokeStyle = "rgba(255,255,255,.8)"; V.ctx.lineWidth = Math.max(1, V.k*.03); V.ctx.beginPath(); V.ctx.moveTo(p1[0], p1[1]); V.ctx.quadraticCurveTo((p1[0] + p2[0])/2, (p1[1] + p2[1])/2 - V.k*.05, p2[0], p2[1]); V.ctx.stroke(); });
       poly(ring(.6, .56, .06), "#bfe9f7"); poly(ring(.5, .46, .07), "#f3d79a"); poly(ring(.32, .3, .1), "#e8c47e");
     } else if (t.type === "expo"){
-      ptext(r.X0 + 1.05, r.Y0 + .8, "Y", "GRAND EXPO", .2, 400, "#4d2c7a", 1.4, "Bungee, sans-serif");
     } else if (t.type === "jet"){
       const p1 = P(r.X0 + .25, r.Y0 + .8, .003), p2 = P(r.X1 - .25, r.Y0 + .8, .003);
       rect3(r.X0 + .15, r.Y0 + .62, r.X1 - .15, r.Y0 + .98, .002, "#6f7b86");
       V.ctx.setLineDash([V.k*.12, V.k*.1]); V.ctx.strokeStyle = "#fff"; V.ctx.lineWidth = Math.max(1, V.k*.03); V.ctx.beginPath(); V.ctx.moveTo(p1[0], p1[1]); V.ctx.lineTo(p2[0], p2[1]); V.ctx.stroke(); V.ctx.setLineDash([]);
-      ptext(r.X0 + .8, r.Y0 + 1.35, "X", "JET PORT", .24, 400, "#2c3a46", 1.3, "Bungee, sans-serif");
     }
     /* price strip along the inner edge: blank until the city is bought, then the rent in the owner's color, same size on every tile */
     if (t.type === "city" || t.type === "beach"){
-      const pl = sub(T, .75, .97), ins = e === "X" ? {X0:pl.X0 + .05, X1:pl.X1 - .05, Y0:pl.Y0, Y1:pl.Y1} : {X0:pl.X0, X1:pl.X1, Y0:pl.Y0 + .05, Y1:pl.Y1 - .05};
-      const pc = along(r, .86);
+      const ins = sub(T, .75, 1 - g/D);   // edge to edge: the full width of the tile top, out to its road-side edge
+      const pc = along(r, .87);
       if (st){ rect3(ins.X0, ins.Y0, ins.X1, ins.Y1, .004, byId(state, st.o).color); ptext(pc[0], pc[1], e, money(rentOf(state, i)).replace("₹", ""), .24, 900, "#ffffff", .8); }
       else rect3(ins.X0, ins.Y0, ins.X1, ins.Y1, .004, "#fffdf6");   // prices stay hidden until someone buys the city
     }
@@ -350,10 +359,14 @@ const board = (() => {
     items.push({dep:S - D/2 + S - D/2 + .2, f:onTile(0, () => { flag(S - .35, S - D + .3, "#e5484d", .9); flag(S - D + .3, S - .35, "#2f7fe0", .9); })});
     /* Lost Island: palms on the sand, then the name written straight across the screen */
     items.push({dep:D/2 + S - D/2 - .6, f:onTile(8, () => { const cx = D/2, cy = S - D/2; palm(cx - .32, cy - .3, 1.05); palm(cx + .02, cy - .4, .8); bush(cx - .38, cy + .02, .7); })});
-    items.push({dep:D/2 + S - D/2 + .6, f:onTile(8, () => { const cx = D/2, cy = S - D/2;
-      const p = P(cx + .42, cy + .42, .05), x = V.ctx, fs = Math.max(9, V.k*.25);
+    /* Corner names are written straight across the screen, white with a colored outline, near the front of the corner */
+    const cornerLabel = (i, X, Y, text, outline) => items.push({dep:X + Y + 1.2, f:onTile(i, () => {   // drawn over the props on the same corner
+      const p = P(X, Y, .05), x = V.ctx, fs = Math.max(9, V.k*.25);
       x.save(); x.font = `400 ${fs}px Bungee, sans-serif`; x.textAlign = "center"; x.textBaseline = "middle"; x.lineJoin = "round";
-      x.lineWidth = Math.max(2, fs*.28); x.strokeStyle = "#1f4f63"; x.strokeText("LOST ISLAND", p[0], p[1]); x.fillStyle = "#ffffff"; x.fillText("LOST ISLAND", p[0], p[1]); x.restore(); })});
+      x.lineWidth = Math.max(2, fs*.28); x.strokeStyle = outline; x.strokeText(text, p[0], p[1]); x.fillStyle = "#ffffff"; x.fillText(text, p[0], p[1]); x.restore(); })});
+    cornerLabel(8, D/2, S - D/2, "LOST ISLAND", "#1f4f63");
+    cornerLabel(16, D/2, D/2, "GRAND EXPO", "#4d2c7a");
+    cornerLabel(24, S - D/2, D/2, "AIRPORT", "#2c3a46");
     items.push({dep:.9 + .9, f:onTile(16, () => { const c = P(.75, .75, 0), top = P(.75, .75, 1.05), R = V.k*.52, x = V.ctx;
       x.strokeStyle = "#6b4c9a"; x.lineWidth = Math.max(2, V.k*.05); x.beginPath(); x.moveTo(c[0] - V.k*.3, c[1]); x.lineTo(top[0], top[1]); x.lineTo(c[0] + V.k*.3, c[1]); x.stroke();
       x.strokeStyle = "#f2b51c"; x.beginPath(); x.arc(top[0], top[1], R, 0, Math.PI*2); x.stroke();
@@ -650,7 +663,7 @@ function levelArt(level, color, kind, zoom){
   zoom = zoom || 1;   // 2 draws it twice as big (the beach card)
   const cv = document.createElement("canvas"), dpr = Math.min(2, devicePixelRatio || 1), Wc = 130*zoom, Hc = 100*zoom; cv.width = Wc*dpr; cv.height = Hc*dpr;
   const c = cv.getContext("2d"); c.scale(dpr, dpr);
-  const save = {ctx:V.ctx, k:V.k, ox:V.ox, oy:V.oy}; V.ctx = c; V.k = 46*zoom; V.ox = Wc/2; V.oy = 30*zoom;
+  const save = {ctx:V.ctx, k:V.k, ox:V.ox, oy:V.oy}; V.ctx = c; V.k = 46*zoom; V.ox = Wc/2; V.oy = (level === 5 && kind !== "beach" ? 40 : 30)*zoom;   // the Hotel is tall: start lower so its sign fits
   box3(0, 0, 1.2, 1.2, .1, kind === "beach" ? "#f3d79a" : "#8fcf6b", -.1);
   if (kind === "beach"){ rect3(0, .85, 1.2, 1.2, .001, "#58b8e0"); palm(1.0, .12, .7); resort(.55, .55, .95, color); }
   else building(level, .6, .6, color, "X");

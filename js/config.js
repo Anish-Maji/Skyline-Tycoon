@@ -4,8 +4,8 @@ const N = 32, START_CASH = 1500, GO_BONUS = 200, BAIL = 50;
 /* Selling a property to the bank pays this share of what was spent on it */
 const SELL_RATE = .5;
 const MULT = [0.1, 0.35, 0.8, 1.4, 2.2];
-/* First lap rule: until a player passes Start once, they can build up to this level. 1 Land, 2 House 1, 3 House 2, 4 House 3, 5 Landmark. */
-const FIRST_LAP_MAX_LEVEL = 3;   // House 2: House 3 and Landmarks wait until the first lap is done
+/* First lap rule: until a player passes Start once, they can build up to this level. 1 Land, 2 House 1, 3 House 2, 4 House 3, 5 Hotel. */
+const FIRST_LAP_MAX_LEVEL = 3;   // House 2: House 3 and Hotels wait until the first lap is done
 /* Festivals: when a game starts, "count" random cities get a festival for the whole game. Their rent is multiplied by rentMult. */
 const FESTIVALS = {count:3, rentMult:2};
 /* ================= QUICK SETTINGS =================
@@ -18,7 +18,7 @@ const FESTIVALS = {count:3, rentMult:2};
    tripleMonopoly  win by owning three full color sets
    beachMonopoly   win by owning all four beaches
    islandRent      players stuck on Lost Island still collect rent
-   botBuild        bots build houses and Landmarks (No: bots only buy land)
+   botBuild        bots build houses and Hotels (No: bots only buy land)
    directBuild     build several levels in one visit (No: one level each time you land)
    doublesAgain    roll again after double six (any doubles still get you off Lost Island) */
 const DEFAULT_SETTINGS = {playTime:60, startCash:START_CASH, lapBonus:GO_BONUS, festivals:FESTIVALS.count,
@@ -26,7 +26,7 @@ const DEFAULT_SETTINGS = {playTime:60, startCash:START_CASH, lapBonus:GO_BONUS, 
 /* Slider ranges in the Quick settings panel, and the play time choices (0 = no limit) */
 const SETTING_RANGES = {startCash:{min:200, max:10000, step:100}, lapBonus:{min:0, max:2000, step:50}, festivals:{min:0, max:10, step:1}};
 const PLAY_TIMES = [20, 60, 120, 0];
-const LEVEL_NAMES = ["", "Land", "House 1", "House 2", "House 3", "Landmark"];
+const LEVEL_NAMES = ["", "Land", "House 1", "House 2", "House 3", "Hotel"];
 /* The game's public claude.ai link. Invites send friends here with the room code. */
 const SHARE_URL = "https://claude.ai/artifact/3iTp5tUrE5zy2dEtF1kwVr";
 /* Online rooms on your own site (Vercel): paste the web app config from the Firebase console here.
@@ -49,16 +49,16 @@ const PCOLORS = ["#e5484d", "#2f7fe0", "#e9a514", "#25a86a"];
    So keep: three regions with 3 cities, four regions with 2 cities and a beach, and one region with 2 cities and no beach.
    A region is one color set. Its cities always sit together, and a coastal region's beach sits right beside its pair.
    Each new game shuffles which trio and which coastal stack goes where, and the city order inside each.
-   Prices are in thousands of rupees. Houses cost half the land price each, a Landmark costs the land price. */
+   Prices are in thousands of rupees. Houses cost half the land price each, a Hotel costs the land price. */
 const REGIONS = [
-  {id:"east",        color:"#b07a58", tint:"#ead2bf", cities:[["Kolkata","CCU",300], ["Patna","PAT",90], ["Ranchi","RAN",70]]},
-  {id:"rajasthan",   color:"#f0832a", tint:"#f9d5b4", cities:[["Jaipur","JAI",180], ["Udaipur","UDR",120], ["Jaisalmer","JSA",90]]},
-  {id:"capital",     color:"#34507e", tint:"#c4cfe3", cities:[["Delhi","DEL",400], ["Gurugram","GGN",230], ["Lucknow","LKO",160]]},
-  {id:"maharashtra", color:"#d4468c", tint:"#f3c6dc", cities:[["Mumbai","BOM",450], ["Pune","PNQ",260]], beach:["Juhu Beach","JUH"]},
-  {id:"tamilnadu",   color:"#1f9c8c", tint:"#bfe5df", cities:[["Chennai","MAA",290], ["Coimbatore","CBE",110]], beach:["Marina Beach","MAR"]},
-  {id:"kerala",      color:"#c9b11a", tint:"#efe6a8", cities:[["Kochi","COK",150], ["Trivandrum","TRV",130]], beach:["Kovalam Beach","KOV"]},
-  {id:"gujarat",     color:"#3fb0de", tint:"#c6e7f5", cities:[["Ahmedabad","AMD",210], ["Surat","STV",130]], beach:["Mandvi Beach","MDV"]},
-  {id:"deccan",      color:"#7c5cd6", tint:"#d8cdf4", cities:[["Bengaluru","BLR",420], ["Hyderabad","HYD",320]]}
+  {id:"east",        name:"East India", color:"#b07a58", tint:"#ead2bf", cities:[["Kolkata","CCU",300], ["Patna","PAT",90], ["Ranchi","RAN",70]]},
+  {id:"rajasthan",   name:"Rajasthan", color:"#f0832a", tint:"#f9d5b4", cities:[["Jaipur","JAI",180], ["Udaipur","UDR",120], ["Jaisalmer","JSA",90]]},
+  {id:"capital",     name:"the Capital Region", color:"#34507e", tint:"#c4cfe3", cities:[["Delhi","DEL",400], ["Gurugram","GGN",230], ["Lucknow","LKO",160]]},
+  {id:"maharashtra", name:"Maharashtra", color:"#d4468c", tint:"#f3c6dc", cities:[["Mumbai","BOM",450], ["Pune","PNQ",260]], beach:["Juhu Beach","JUH"]},
+  {id:"tamilnadu",   name:"Tamil Nadu", color:"#1f9c8c", tint:"#bfe5df", cities:[["Chennai","MAA",290], ["Coimbatore","CBE",110]], beach:["Marina Beach","MAR"]},
+  {id:"kerala",      name:"Kerala", color:"#c9b11a", tint:"#efe6a8", cities:[["Kochi","COK",150], ["Trivandrum","TRV",130]], beach:["Kovalam Beach","KOV"]},
+  {id:"gujarat",     name:"Gujarat", color:"#3fb0de", tint:"#c6e7f5", cities:[["Ahmedabad","AMD",210], ["Surat","STV",130]], beach:["Mandvi Beach","MDV"]},
+  {id:"deccan",      name:"the Deccan", color:"#7c5cd6", tint:"#d8cdf4", cities:[["Bengaluru","BLR",420], ["Hyderabad","HYD",320]]}
 ];
 const GROUPS = Object.fromEntries(REGIONS.map(r => [r.id, {color:r.color, tint:r.tint}]));
 const BEACH_COLOR = "#e8b960";
@@ -77,7 +77,7 @@ const TILES = [
   {type:"expo", name:"Grand Expo", code:"EXPO"},
   C("capital",0), {type:"fortune",name:"Chance",code:"?"}, C("capital",1), C("capital",2),
   B("kerala"), C("kerala",0), C("kerala",1),
-  {type:"jet", name:"Jet Port", code:"JET"},
+  {type:"jet", name:"Airport", code:"AIR"},
   C("deccan",0), C("deccan",1), {type:"fortune",name:"Chance",code:"?"}, {type:"tax",id:"lux",name:"Luxury Tax",code:"TAX"},
   B("gujarat"), C("gujarat",0), C("gujarat",1)
 ];
@@ -96,14 +96,14 @@ const CARDS = [
   {id:"bonus",     kind:"good",  title:"Investor bonus",      text:"Collect ₹150K."},
   {id:"bday",      kind:"good",  title:"Company anniversary", text:"Every tycoon pays you ₹30K."},
   {id:"jail",      kind:"bad",   title:"Storm warning",       text:"You wash up on Lost Island."},
-  {id:"quake",     kind:"bad",   title:"Earthquake",          text:"A random city loses one building level. Landmarks stand firm."},
+  {id:"quake",     kind:"bad",   title:"Earthquake",          text:"A random city loses one building level. Hotels stand firm."},
   {id:"blackout",  kind:"bad",   title:"Blackout",            text:"A random city collects no rent for 2 rounds."},
   {id:"fine",      kind:"bad",   title:"Fine",                text:"Pay ₹100K to the bank."},
   {id:"back",      kind:"bad",   title:"Wrong exit",          text:"Go back 3 tiles."},
   {id:"epidemic",  kind:"world", title:"Epidemic",            text:"Rent in one region is halved for 2 rounds."},
-  {id:"forcesale", kind:"world", title:"Force sale",          text:"Buy any rival city that isn't a Landmark at its normal value."},
-  {id:"jet",       kind:"world", title:"World tour",          text:"Go to Jet Port and fly anywhere next turn."},
-  {id:"demolish",  kind:"world", title:"Demolition",          text:"Pick a rival's city. Its building drops one level, even a Landmark."}
+  {id:"forcesale", kind:"world", title:"Force sale",          text:"Buy any rival city that isn't a Hotel at its normal value."},
+  {id:"jet",       kind:"world", title:"World tour",          text:"Go to the Airport and fly anywhere next turn."},
+  {id:"demolish",  kind:"world", title:"Demolition",          text:"Pick a rival's city. Its building drops one level, even a Hotel."}
 ];
 const CARD_KINDS = {good:{label:"Boost", color:"#23915a"}, bad:{label:"Setback", color:"#c9423a"}, world:{label:"World event", color:"#7c5cd6"}};
 /* How many rounds a Blackout or Epidemic lasts after the round it starts in */
@@ -136,7 +136,7 @@ const FACING_BY_SIDE = ["left", "right", "left", "right"];
    See assets/README.md for sizes and anchoring. Paths are relative to index.html. */
 const ASSETS = {
   characters: { 0: null, 1: null, 2: null, 3: null, 4: null, 5: null, 6: null, 7: null, 8: null, 9: null, 10: null, 11: null }, // one per CHARACTERS entry, drawn facing bottom-right, e.g. "assets/characters/char-0.png"
-  buildings:  { 1: null, 2: null, 3: null, 4: null, 5: null }, // 1 Land, 2 House 1, 3 House 2, 4 House 3, 5 Landmark
+  buildings:  { 1: null, 2: null, 3: null, 4: null, 5: null }, // 1 Land, 2 House 1, 3 House 2, 4 House 3, 5 Hotel
   props:      { pine: null, palm: null, money: null },
   cards:      {}   // Chance card pictures by card id, e.g. shield: "assets/cards/shield.png" (shown at 240 x 170)
 };

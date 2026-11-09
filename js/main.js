@@ -31,6 +31,7 @@ function setState(s, opts){
   if (s.status === "playing" || s.status === "over"){
     if (prev && s.rollId !== app.lastRoll && app.lastRoll !== -1){ sfx("dice"); const d1 = $("d1"), d2 = $("d2"); d1.classList.remove("roll"); d2.classList.remove("roll"); void d1.offsetWidth; d1.classList.add("roll"); d2.classList.add("roll"); }
     const oc = Object.keys(s.own).length; if (prev && oc > app.lastOwnCount) sfx("buy");
+    if (prev && !(opts && opts.reset)) newFullSets(prev, s).forEach(b => bannerQ.push(b));
     if (s.card && s.card.seq !== app.lastCard){ app.lastCard = s.card.seq; showCard(Object.assign({}, s.card)); }
     if (prev && s.status === "over" && app.lastStatus !== "over") sfx("win");
     app.lastOwnCount = oc; app.lastRoll = s.rollId; app.lastStatus = s.status;
@@ -44,7 +45,25 @@ let cardT = null;
 const CARD_SHOW_MS = 4200, CARD_AFTER_MS = 350;   // how long the card stays, and the pause after the character lands
 /* True while a Chance card is waiting to show or is on screen. The next move waits for it. */
 let cardOpen = false;
-const cardBusy = () => cardOpen;
+const cardBusy = () => cardOpen || bannerOpen;
+/* ---------- Full set banner ----------
+   When a player comes to own every city of a color, a wide band in that color sweeps across the board:
+   FULL SET, who and which region, and that rent there is now doubled. It waits for the walk, the building pop,
+   the cash stack and any Chance card, stays SET_BANNER_MS, and the next move waits for it. */
+const SET_BANNER_MS = 2800;
+const bannerQ = []; let bannerOpen = false;
+function fullSets(s){ const out = {}; REGIONS.forEach(r => { const tiles = TILES.map((t, i) => t.g === r.id ? i : -1).filter(i => i >= 0);
+  const o = s.own[tiles[0]] && s.own[tiles[0]].o; if (o && tiles.every(i => s.own[i] && s.own[i].o === o)) out[r.id] = o; }); return out; }
+function newFullSets(prev, s){ const a = fullSets(prev), b = fullSets(s); return Object.keys(b).filter(g => a[g] !== b[g]).map(g => ({g, pid:b[g]})); }
+setInterval(() => {
+  if (bannerOpen || !bannerQ.length || cardOpen || board.busy()) return;
+  const b = bannerQ.shift(), s = app.s, who = s && byId(s, b.pid), r = region(b.g); if (!who || !r) return;
+  bannerOpen = true; const el = $("setBanner");
+  el.style.setProperty("--sc", r.color); el.style.setProperty("--pc", who.color);
+  $("sbSub").textContent = `${app.mode === "online" && who.id === app.me ? "You own" : who.name + " owns"} all of ${r.name} · rent doubled`;
+  el.hidden = false; el.classList.remove("show"); void el.offsetWidth; el.classList.add("show"); sfx("fullset");
+  setTimeout(() => { el.hidden = true; el.classList.remove("show"); bannerOpen = false; render(); scheduleBot(); }, SET_BANNER_MS);
+}, 150);
 function showCard(card, waited){
   cardOpen = true;
   /* Wait until the dice are gone and the character is standing on the Chance tile, then a short beat (CARD_AFTER_MS).
@@ -203,7 +222,7 @@ function debtId(s){ const d = s.pending; return [s.turn, d.amt, d.why, s.moveSeq
 function showDebt(s, p){
   const d = s.pending, id = debtId(s), now = performance.now();
   if (debtUI.id !== id){ debtUI.id = id; debtUI.sel = new Set(); debtUI.until = now + 1900;
-    $("alertText").textContent = `YOU DON'T HAVE ENOUGH MONEY TO ${(DEBT_TEXT[d.why] || "pay").toUpperCase()}`; $("alertBand").hidden = false; sfx("crash"); }
+    showAlert(`YOU DON'T HAVE ENOUGH MONEY TO ${(DEBT_TEXT[d.why] || "pay").toUpperCase()}`, 1900); }
   const mine = owned(s, p.id); debtUI.sel.forEach(i => { if (!mine.includes(i)) debtUI.sel.delete(i); });
   clearTimeout(debtUI.timer);
   if (now < debtUI.until){ debtUI.timer = setTimeout(render, debtUI.until - now + 20); return; }
@@ -229,9 +248,10 @@ function placeSellTags(s, p){
     b.innerHTML = `<span class="box"></span><span></span><span class="nm"></span>`; b.children[1].textContent = money(saleValue(s, i)); b.children[2].textContent = TILES[i].name;
     b.onclick = () => toggleSell(i); box.appendChild(b);
   });
-  /* nudge tags up until none overlap */
-  const placed = [];
+  /* a tag that would sit on the sell card moves up to just above it (its city name still says which one), then nudge tags up until none overlap */
+  const card = $("debt").hidden ? null : $("debt").getBoundingClientRect(), host = box.getBoundingClientRect(), placed = card ? [card] : [];
   [...box.children].sort((a, b) => parseFloat(b.style.top) - parseFloat(a.style.top)).forEach(t => {
+    if (card){ const r = t.getBoundingClientRect(); if (r.left < card.right && card.left < r.right && r.top < card.bottom && card.top < r.bottom) t.style.top = (card.top - host.top - 20) + "px"; }   // 20: 6px gap plus the 14px the card is still rising
     for (let k = 0; k < 8; k++){ const r = t.getBoundingClientRect(); if (!placed.some(q => r.left < q.right && q.left < r.right && r.top < q.bottom && q.top < r.bottom)) break; t.style.top = (parseFloat(t.style.top) - r.height - 6) + "px"; }
     placed.push(t.getBoundingClientRect());
   });
@@ -242,6 +262,13 @@ addEventListener("resize", () => { if (!$("debt").hidden) render(); });
 
 /* ============ Build popup (level cards) ============ */
 const pop = {sel:1};
+/* The big "not enough money" band across the board, also used before the sell card when a player is short */
+const ALERT_MS = 1900;
+const poorUI = {key:null, until:0, timer:null};
+function showAlert(text, ms, then){
+  const b = $("alertBand"); $("alertText").textContent = text; b.hidden = false; b.classList.remove("show"); void b.offsetWidth; b.classList.add("show"); sfx("crash");
+  poorUI.until = Date.now() + ms; clearTimeout(poorUI.timer); poorUI.timer = setTimeout(() => { b.hidden = true; if (then) then(); }, ms);
+}
 function syncPopup(){
   const s = app.s, m = $("bmodal"); if (m.classList.contains("leaving")) return;
   const p = s && s.status === "playing" ? s.players[s.turn] : null;
@@ -250,6 +277,11 @@ function syncPopup(){
   const key = s.rev + ":" + s.pending.k;
   if (app.popDismissed === key) { m.hidden = true; return; }
   if (app.popKey === key && !m.hidden) return;
+  /* Can not afford it: the blue "not enough money" band shows first, then the popup opens with everything locked */
+  const k = s.pending.k, t = TILES[s.pending.tile], need = k === "takeover" ? s.pending.cost : k === "buy" ? t.price : 0;
+  if (need > p.cash && poorUI.key !== key){ poorUI.key = key;
+    showAlert(`YOU DON'T HAVE ENOUGH MONEY TO ${k === "takeover" ? "BUY OUT" : "BUY"} THIS ${t.type === "beach" ? "BEACH" : "CITY"}`, ALERT_MS, syncPopup); return; }
+  if (poorUI.key === key && poorUI.until > Date.now()) return;
   app.popKey = key; buildPopup(s, p); m.hidden = false; setTimeout(() => $("bbuy").focus(), 30);
 }
 /* Beach card: the resort picture on the left, the rent for 1 to 4 beaches on the right, with the row that applies highlighted */
@@ -316,7 +348,7 @@ function buildPopup(s, p){
     const b = $("bbuy"); b.disabled = pop.sel <= cur || cost > p.cash;
     b.textContent = pop.sel <= cur ? (costRange(t, cur, cur + 1) > p.cash ? `Not enough money (${money(costRange(t, cur, cur + 1))})` : "Pick something to build") : `${k === "buy" ? "Buy" : "Build"} for ${money(cost)}`;
     b.onclick = () => closePop(k === "buy" ? {t:"buy", to:pop.sel} : {t:"upgrade", to:pop.sel});
-    $("bfoot").innerHTML = (pop.sel >= 5 ? "Landmarks can't be bought from you." : `Other players can buy it from you for: <b>${money(2*costRange(t, 0, lvl))}</b>`)
+    $("bfoot").innerHTML = (pop.sel >= 5 ? "Hotels can't be bought from you." : `Other players can buy it from you for: <b>${money(2*costRange(t, 0, lvl))}</b>`)
       + (cap < 5 ? `<br>First lap: you can build up to ${LEVEL_NAMES[cap]}. Pass Start to unlock the rest.` : "")
       + (step < 5 && cur < 4 ? "<br>You can build one level each time you land here." : "");
   }
@@ -410,16 +442,16 @@ function rulesHtml(R){
   const wins = [R.tripleMonopoly && "three full color sets", R.beachMonopoly && "all four beaches", R.lineMonopoly && "every city on one side"].filter(Boolean);
   const li = [
     `Each tycoon starts with ${money(R.startCash)}. Roll two dice and move around the board.${R.lapBonus ? ` Pass Start to collect ${money(R.lapBonus)}.` : ""}`,
-    R.directBuild ? "Buy a city's land and up to three houses in one go. Land on it again to build more, then a Landmark." : "Buy a city's land, then build one level each time you land there, up to a Landmark.",
-    `On your first lap you can build up to ${LEVEL_NAMES[FIRST_LAP_MAX_LEVEL]}. Pass Start once to unlock ${LEVEL_NAMES[FIRST_LAP_MAX_LEVEL + 1]} and Landmarks.`,
-    "Rent doubles when you own a whole color set. Landmarks can't be bought from you.",
+    R.directBuild ? "Buy a city's land and up to three houses in one go. Land on it again to build more, then a Hotel." : "Buy a city's land, then build one level each time you land there, up to a Hotel.",
+    `On your first lap you can build up to ${LEVEL_NAMES[FIRST_LAP_MAX_LEVEL]}. Pass Start once to unlock ${LEVEL_NAMES[FIRST_LAP_MAX_LEVEL + 1]} and Hotels.`,
+    "Rent doubles when you own a whole color set. Hotels can't be bought out or shaken down by earthquakes.",
     "Land on a rival's city to pay rent, then buy it from them for twice its value if you can afford it.",
     "Beaches pay more the more of them you own.",
     R.doublesAgain ? "Double six: play the tile you land on (buy, build or pay), then roll again. Three double sixes in a row strand you on Lost Island. Any doubles get you off Lost Island." : "Any doubles get you off Lost Island. Double six doesn't give another roll.",
     !R.islandRent && "Players stuck on Lost Island can't collect rent.",
     R.festivals && `Every game starts with festivals in ${R.festivals === 1 ? "one random city" : R.festivals + " random cities"}. They last the whole game and double the rent there.`,
     "Chance cards can be Boosts (shield, free build, tax exemption, escape card), Setbacks (earthquake, blackout, fines) or World events (epidemic, force sale, world tour, demolition).",
-    "Grand Expo doubles rent in a city you choose. Jet Port lets you fly anywhere next turn.",
+    "Grand Expo doubles rent in a city you choose. The Airport lets you fly anywhere next turn.",
     (wins.length ? `Win instantly with ${wins.length > 1 ? wins.slice(0, -1).join(", ") + " or " + wins[wins.length - 1] : wins[0]}. Or be` : "Win by being") + " the last tycoon with money.",
     R.playTime && `The game lasts ${R.playTime < 60 ? R.playTime + " minutes" : R.playTime/60 + (R.playTime === 60 ? " hour" : " hours")}. When time runs out, the round finishes and the richest tycoon wins.`
   ].filter(Boolean);

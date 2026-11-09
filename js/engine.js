@@ -58,7 +58,7 @@ function say(s, m){ s.log.push(m); if (s.log.length > 40) s.log.splice(0, s.log.
 function stepCap(s, cur){ return rules(s).directBuild ? 5 : cur + 1; }
 function buildCap(p){ return p.laps == null || p.laps >= 1 ? 5 : FIRST_LAP_MAX_LEVEL; }   // saves from before laps existed count as past lap 1
 function passStart(s, p){ const b = rules(s).lapBonus; p.cash += b; p.laps = (p.laps || 0) + 1; say(s, b ? `${p.name} passed Start and collected ${money(b)}.` : `${p.name} passed Start.`);
-  if (p.laps === 1 && FIRST_LAP_MAX_LEVEL < 5) say(s, `${p.name} finished the first lap. ${LEVEL_NAMES[FIRST_LAP_MAX_LEVEL + 1]} and Landmarks are unlocked.`); }
+  if (p.laps === 1 && FIRST_LAP_MAX_LEVEL < 5) say(s, `${p.name} finished the first lap. ${LEVEL_NAMES[FIRST_LAP_MAX_LEVEL + 1]} and Hotels are unlocked.`); }
 function upgradeOptions(s, p, i){
   const t = TILES[i], st = s.own[i], opts = []; if (!st || t.type !== "city") return opts; const cap = Math.min(buildCap(p), stepCap(s, st.l));
   if (st.l < 4){ for (let l = st.l+1; l <= Math.min(4, cap); l++){ const c = costRange(t, st.l, l); if (c <= p.cash) opts.push({to:l, cost:c}); } }
@@ -186,9 +186,9 @@ function regionCities(g){ const n = TILES.filter(t => t.g === g).map(t => t.name
 function shielded(s, p, what){ if (!p || !p.shield) return false; p.shield--; say(s, `${p.name}'s Shield blocked the ${what}.`); return true; }
 /* Cities p can grow by one level for free (first lap rule applies) */
 function freeBuildOptions(s, p){ const cap = buildCap(p); return owned(s, p.id).filter(i => TILES[i].type === "city" && s.own[i].l < 5 && s.own[i].l + 1 <= cap); }
-/* Rival cities and beaches p can force-buy at their normal value. Landmarks are safe. */
+/* Rival cities and beaches p can force-buy at their normal value. Hotels are safe. */
 function forceSaleOptions(s, p){ return Object.keys(s.own).map(Number).filter(i => { const st = s.own[i], o = byId(s, st.o); return st.o !== p.id && o && !o.bankrupt && (TILES[i].type === "beach" || st.l < 5) && tileValue(i, st) <= p.cash; }); }
-/* Rival cities with at least House 1 that the Demolition card can knock down one level. Landmarks count too. */
+/* Rival cities with at least House 1 that the Demolition card can knock down one level. Hotels count too. */
 function demolishOptions(s, p){ return Object.keys(s.own).map(Number).filter(i => { const st = s.own[i], o = byId(s, st.o); return TILES[i].type === "city" && st.o !== p.id && o && !o.bankrupt && st.l >= 2; }); }
 /* Chance cards that make you pick a city. They can't be skipped: if time runs out, a random city is picked. */
 const CHANCE_PICKS = {freebuild:freeBuildOptions, forcebuy:forceSaleOptions, demolish:demolishOptions};
@@ -268,7 +268,7 @@ function resolve(s, p){
     case "expo":
       if (owned(s, p.id).some(j => TILES[j].type === "city")){ s.phase = "act"; s.pending = {k:"expo"}; return; }
       say(s, `${p.name} visited the Grand Expo with nothing to show.`); return finish(s);
-    case "jet": p.flight = true; say(s, `${p.name} checked in at Jet Port. Next turn they can fly anywhere.`); return finish(s);
+    case "jet": p.flight = true; say(s, `${p.name} checked in at the Airport. Next turn they can fly anywhere.`); return finish(s);
     case "jail": say(s, `${p.name} is just visiting Lost Island.`); return finish(s);
     default: return finish(s);
   }
@@ -336,7 +336,7 @@ function act(s0, a){
       if (s.phase !== "act" || !s.pending || s.pending.k !== "upgrade") return E("Nothing to build.");
       const i = s.pending.tile, opt = upgradeOptions(s, p, i).find(o => o.to === a.to);
       if (!opt) return E("You can't build that.");
-      p.cash -= opt.cost; s.own[i].l = opt.to; txn(s, p.id, null, opt.cost); say(s, `${p.name} built ${opt.to === 5 ? "a Landmark" : "up to " + LEVEL_NAMES[opt.to]} in ${TILES[i].name} for ${money(opt.cost)}.`);
+      p.cash -= opt.cost; s.own[i].l = opt.to; txn(s, p.id, null, opt.cost); say(s, `${p.name} built ${opt.to === 5 ? "a Hotel" : "up to " + LEVEL_NAMES[opt.to]} in ${TILES[i].name} for ${money(opt.cost)}.`);
       finish(s); break;
     }
     case "takeover": {
@@ -356,7 +356,7 @@ function act(s0, a){
       if (s.phase !== "act" || !s.pending || s.pending.k !== "freebuild") return E("Nothing to build.");
       if (!freeBuildOptions(s, p).includes(a.tile)) return E("Pick one of your cities that can grow.");
       const st = s.own[a.tile]; st.l++;
-      say(s, `${p.name} built ${st.l === 5 ? "a Landmark" : "up to " + LEVEL_NAMES[st.l]} in ${TILES[a.tile].name} for free.`); finish(s); break;
+      say(s, `${p.name} built ${st.l === 5 ? "a Hotel" : "up to " + LEVEL_NAMES[st.l]} in ${TILES[a.tile].name} for free.`); finish(s); break;
     }
     case "demolish": {
       if (s.phase !== "act" || !s.pending || s.pending.k !== "demolish") return E("Nothing to knock down.");

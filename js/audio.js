@@ -62,5 +62,6 @@ function sfx(kind){
   else if (kind === "card"){ tone(mtof(79), t, .2, "sine", .08, d); tone(mtof(86), t + .1, .35, "sine", .07, d); }
   else if (kind === "crash"){ [64,60,55].forEach((m, i) => tone(mtof(m), t + i*.14, .3, "sawtooth", .05, d, 1400)); }
   else if (kind === "festival"){ [67,72,76,79,84].forEach((m, i) => tone(mtof(m), t + i*.08, .3, "triangle", .08, d)); for (let i = 0; i < 6; i++) hiss(t + .2 + i*.09, .06, .12, d, 4000); }
+  else if (kind === "fullset"){ [64,67,71,76].forEach((m, i) => tone(mtof(m), t + i*.06, .22, "square", .045, d, 2600)); tone(mtof(83), t + .3, .6, "triangle", .1, d); for (let i = 0; i < 5; i++) hiss(t + .3 + i*.07, .05, .1, d, 5000); }
   else if (kind === "win"){ [60,64,67,72,76,79,84].forEach((m, i) => tone(mtof(m), t + i*.09, .5, "triangle", .1, d)); }
 }

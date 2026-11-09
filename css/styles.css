@@ -191,12 +191,17 @@ body{margin:0;background:var(--stage);color:var(--ink);font-family:var(--body);f
 @media (max-width:560px){.die{width:30px;height:30px;padding:5px;border-radius:7px}.die i{width:5px;height:5px}.turnline{font-size:11px;padding:4px 9px}.bubble{font-size:11px;padding:5px 10px}.hub{gap:5px}}
 @media (max-width:760px){.toolbar{top:auto;bottom:calc(14px + 60px)}.hub-actions .btn.big{min-width:0;font-size:15px;padding:9px 18px}.hub{width:min(240px,64vw)}}
 
-/* Not enough money: a red alert across the screen, then the sell card with price tags on the player's cities */
-.alertband{position:fixed;left:0;right:0;top:50%;transform:translateY(-50%);min-height:200px;display:grid;place-items:center;padding:20px;z-index:30;pointer-events:none;
-  background:radial-gradient(ellipse 60% 55% at 50% 50%,rgba(255,24,64,.97) 0%,rgba(255,40,80,.9) 45%,rgba(255,90,70,.35) 75%,rgba(255,90,70,0) 100%);animation:alertIn .25s ease}
-.alertband span{font-family:var(--display);color:#fff;font-size:clamp(22px,4.4vw,48px);line-height:1.15;text-align:center;max-width:820px;text-shadow:0 3px 0 rgba(120,0,20,.45)}
-@keyframes alertIn{from{opacity:0;transform:translateY(-50%) scaleY(.6)}to{opacity:1;transform:translateY(-50%)}}
-.debt{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(380px,calc(100vw - 32px));background:var(--surface);border-radius:18px;overflow:hidden;box-shadow:0 24px 60px rgba(0,0,0,.35);z-index:9;animation:rise .22s ease}
+/* Not enough money (to buy a city, or to pay rent or tax): a wide blue band across the board with big white words,
+   soft at every edge. For a debt the sell card follows; for a purchase the locked buy popup follows. */
+.alertband{position:fixed;left:0;right:0;top:50%;transform:translateY(-50%);min-height:clamp(200px,34vh,320px);display:grid;place-items:center;padding:24px 16px;z-index:30;pointer-events:none;
+  background:radial-gradient(ellipse 62% 58% at 50% 50%,rgba(14,104,214,.97) 0%,rgba(22,122,232,.92) 42%,rgba(48,150,240,.5) 70%,rgba(60,160,245,0) 100%)}
+.alertband span{font-family:var(--display);color:#fff;font-size:clamp(22px,4.6vw,52px);line-height:1.12;text-align:center;max-width:min(780px,90vw);letter-spacing:.02em;text-shadow:0 3px 0 rgba(0,40,110,.35)}
+.alertband.show{animation:alertIn 1.9s cubic-bezier(.2,.9,.3,1) both}
+.alertband.show span{animation:sbPunch .45s .1s cubic-bezier(.2,1.6,.4,1) both}
+@keyframes alertIn{0%{opacity:0;transform:translateY(-50%) scaleY(.2)}12%{opacity:1;transform:translateY(-50%)}88%{opacity:1;transform:translateY(-50%)}100%{opacity:0;transform:translateY(-50%) scaleY(.6)}}
+.debt{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(380px,calc(100vw - 32px));background:var(--surface);border-radius:18px;overflow:hidden;box-shadow:0 24px 60px rgba(0,0,0,.35);z-index:9;animation:debtIn .22s ease}
+/* its own rise: keeps the centering translate, so the card opens in the middle instead of jumping there */
+@keyframes debtIn{from{transform:translate(-50%,calc(-50% + 14px));opacity:.3}to{transform:translate(-50%,-50%);opacity:1}}
 .debt-head{background:#e5484d;color:#fff;font-family:var(--display);font-size:19px;letter-spacing:.03em;text-align:center;padding:12px 14px}
 .debt-body{padding:14px 16px 16px;display:flex;flex-direction:column;gap:10px}
 .debt-rows{display:grid;grid-template-columns:1fr auto;gap:4px 14px;margin:0;font-size:15px}
@@ -309,3 +314,21 @@ body{margin:0;background:var(--stage);color:var(--ink);font-family:var(--body);f
 /* Countdown under a Chance pick (Free build, Force sale, Demolition) */
 .pick-timer{flex-basis:100%;text-align:center;font-weight:800;font-size:13px;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.5);font-variant-numeric:tabular-nums}
 .pick-timer.late{color:#ffd23f}
+
+/* Full set banner: a wide band in the region's color sweeps across the middle of the board (--sc region, --pc owner) */
+.setbanner{position:absolute;inset:0;z-index:13;display:grid;place-items:center;pointer-events:none;overflow:hidden}
+.sb-band{width:100%;padding:34px 16px 30px;text-align:center;color:#fff;
+  background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--sc) 88%,#000) 16%,var(--sc) 50%,color-mix(in srgb,var(--sc) 88%,#000) 84%,transparent);
+  -webkit-mask-image:linear-gradient(transparent,#000 22%,#000 78%,transparent);mask-image:linear-gradient(transparent,#000 22%,#000 78%,transparent);
+  position:relative}
+.sb-band::after{content:"";position:absolute;inset:0;background:linear-gradient(105deg,transparent 40%,rgba(255,255,255,.35) 50%,transparent 60%);transform:translateX(-100%)}
+.sb-title{font-family:var(--display);font-size:clamp(34px,7vw,64px);line-height:1;letter-spacing:.04em;text-shadow:0 4px 0 rgba(0,0,0,.22)}
+.sb-sub{display:inline-block;margin-top:10px;padding:4px 14px;border-radius:999px;font-weight:800;font-size:clamp(13px,2.2vw,17px);background:rgba(0,0,0,.22);box-shadow:inset 0 0 0 2px var(--pc)}
+.setbanner.show .sb-band{animation:sbOpen 2.8s cubic-bezier(.2,.9,.3,1) both}
+.setbanner.show .sb-band::after{animation:sbShine 1s .45s ease-out both}
+.setbanner.show .sb-title{animation:sbPunch .5s .15s cubic-bezier(.2,1.6,.4,1) both}
+.setbanner.show .sb-sub{animation:rise .4s .4s both}
+@keyframes sbOpen{0%{transform:scaleY(0);opacity:0}12%{transform:scaleY(1);opacity:1}88%{transform:scaleY(1);opacity:1}100%{transform:scaleY(0);opacity:0}}
+@keyframes sbShine{to{transform:translateX(100%)}}
+@keyframes sbPunch{from{transform:scale(1.8);opacity:0}to{transform:none;opacity:1}}
+@media (prefers-reduced-motion:reduce){.setbanner.show .sb-band,.setbanner.show .sb-title,.setbanner.show .sb-sub,.setbanner.show .sb-band::after{animation:none}}

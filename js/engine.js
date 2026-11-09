@@ -11,19 +11,23 @@ function moneyFull(n){ n = Math.round(n*1000); return (n < 0 ? "-" : "") + "₹"
 /* ---------- Per-game board layout ----------
    s.layout maps tile index to {name, code, price, g} for cities and {name, code, region} for beaches. applyLayout writes
    it into TILES, so the rest of the code keeps reading TILES[i]. Games saved without a valid layout use the board in config.js. */
-const TRIO_SLOTS = [[1,2,4], [9,10,12], [17,19,20]];
-const COAST_SLOTS = [{beach:5, pair:[6,7]}, {beach:13, pair:[14,15]}, {beach:21, pair:[22,23]}, {beach:29, pair:[30,31]}];
+/* Inland trios, coastal stacks (a beach plus the cities next to it) and the inland pair. A coastal region goes to a coastal
+   slot with the same number of cities: the bottom-left stack has three, so the three-city coastal region (Maharashtra) lands there. */
+const TRIO_SLOTS = [[1,2,3], [9,10,12], [17,19,20]];
+const COAST_SLOTS = [{beach:4, cities:[5,6,7]}, {beach:13, cities:[14,15]}, {beach:21, cities:[22,23]}, {beach:29, cities:[30,31]}];
 const INLAND_PAIR_SLOTS = [[25,26]];
-const LAYOUT_SLOTS = [...TRIO_SLOTS.flat(), ...COAST_SLOTS.flatMap(c => [c.beach, ...c.pair]), ...INLAND_PAIR_SLOTS.flat()];
+const LAYOUT_SLOTS = [...TRIO_SLOTS.flat(), ...COAST_SLOTS.flatMap(c => [c.beach, ...c.cities]), ...INLAND_PAIR_SLOTS.flat()];
 const BASE_LAYOUT = Object.fromEntries(LAYOUT_SLOTS.map(i => { const t = TILES[i]; return [i, t.type === "city" ? {name:t.name, code:t.code, price:t.price, g:t.g} : {name:t.name, code:t.code, region:t.region}]; }));
 const shuffled = a => { a = a.slice(); for (let k = a.length - 1; k > 0; k--){ const j = Math.floor(Math.random()*(k + 1)); [a[k], a[j]] = [a[j], a[k]]; } return a; };
 function makeLayout(){
-  const trios = shuffled(REGIONS.filter(r => r.cities.length === 3)), coast = shuffled(REGIONS.filter(r => r.cities.length === 2 && r.beach)), inland = shuffled(REGIONS.filter(r => r.cities.length === 2 && !r.beach));
-  if (trios.length !== TRIO_SLOTS.length || coast.length !== COAST_SLOTS.length || inland.length !== INLAND_PAIR_SLOTS.length){ console.warn("REGIONS don't fit the board. Using the default board."); return null; }
+  const trios = shuffled(REGIONS.filter(r => r.cities.length === 3 && !r.beach)), inland = shuffled(REGIONS.filter(r => r.cities.length === 2 && !r.beach));
+  const coastBy = n => shuffled(REGIONS.filter(r => r.beach && r.cities.length === n)), slotsBy = n => COAST_SLOTS.filter(c => c.cities.length === n);
+  const sizes = [...new Set(COAST_SLOTS.map(c => c.cities.length))], coastFits = sizes.every(n => coastBy(n).length === slotsBy(n).length) && REGIONS.filter(r => r.beach).length === COAST_SLOTS.length;
+  if (trios.length !== TRIO_SLOTS.length || !coastFits || inland.length !== INLAND_PAIR_SLOTS.length){ console.warn("REGIONS don't fit the board. Using the default board."); return null; }
   const L = {}, jitter = p => Math.max(40, Math.round(p*(1 + (Math.random()*2 - 1)*PRICE_JITTER)/10)*10);
   const put = (slots, r) => shuffled(r.cities).forEach((c, k) => { L[slots[k]] = {name:c[0], code:c[1], price:jitter(c[2]), g:r.id}; });
   trios.forEach((r, k) => put(TRIO_SLOTS[k], r));
-  coast.forEach((r, k) => { put(COAST_SLOTS[k].pair, r); L[COAST_SLOTS[k].beach] = {name:r.beach[0], code:r.beach[1], region:r.id}; });
+  sizes.forEach(n => { const slots = slotsBy(n); coastBy(n).forEach((r, k) => { put(slots[k].cities, r); L[slots[k].beach] = {name:r.beach[0], code:r.beach[1], region:r.id}; }); });
   inland.forEach((r, k) => put(INLAND_PAIR_SLOTS[k], r));
   return L;
 }
@@ -186,8 +190,8 @@ function regionCities(g){ const n = TILES.filter(t => t.g === g).map(t => t.name
 function shielded(s, p, what){ if (!p || !p.shield) return false; p.shield--; say(s, `${p.name}'s Shield blocked the ${what}.`); return true; }
 /* Cities p can grow by one level for free (first lap rule applies) */
 function freeBuildOptions(s, p){ const cap = buildCap(p); return owned(s, p.id).filter(i => TILES[i].type === "city" && s.own[i].l < 5 && s.own[i].l + 1 <= cap); }
-/* Rival cities and beaches p can force-buy at their normal value. Hotels are safe. */
-function forceSaleOptions(s, p){ return Object.keys(s.own).map(Number).filter(i => { const st = s.own[i], o = byId(s, st.o); return st.o !== p.id && o && !o.bankrupt && (TILES[i].type === "beach" || st.l < 5) && tileValue(i, st) <= p.cash; }); }
+/* Rival cities p can force-buy at their normal value. Hotels and beaches are safe. */
+function forceSaleOptions(s, p){ return Object.keys(s.own).map(Number).filter(i => { const st = s.own[i], o = byId(s, st.o); return st.o !== p.id && o && !o.bankrupt && (TILES[i].type === "city" && st.l < 5) && tileValue(i, st) <= p.cash; }); }
 /* Rival cities with at least House 1 that the Demolition card can knock down one level. Hotels count too. */
 function demolishOptions(s, p){ return Object.keys(s.own).map(Number).filter(i => { const st = s.own[i], o = byId(s, st.o); return TILES[i].type === "city" && st.o !== p.id && o && !o.bankrupt && st.l >= 2; }); }
 /* Chance cards that make you pick a city. They can't be skipped: if time runs out, a random city is picked. */
@@ -255,7 +259,8 @@ function resolve(s, p){
     else if (p.shield){ p.shield--; say(s, `${p.name}'s Shield covered the ${money(r)} rent in ${t.name}.`); }
     else if (!charge(s, p, owner, r, "rent", `${p.name} paid ${money(r)} rent to ${owner.name} in ${t.name}.`)) return;
     if (p.bankrupt) return finish(s);
-    if (s.own[i] && (t.type === "beach" || s.own[i].l < 5)){
+    /* Cities below a Hotel can be bought out. Beaches can not: the visitor just pays rent and moves on. */
+    if (s.own[i] && t.type === "city" && s.own[i].l < 5){
       const c = 2 * tileValue(i, s.own[i]);
       if (p.cash >= c || !p.bot){ s.phase = "act"; s.pending = {k:"takeover", tile:i, cost:c}; return; }
     }
@@ -264,7 +269,9 @@ function resolve(s, p){
   switch (t.type){
     case "fortune": return drawCard(s, p);
     case "tax": if (p.taxFree){ p.taxFree = false; say(s, `${p.name}'s tax exemption covered ${t.name}.`); return finish(s); }
-    { const amt = t.id === "income" ? Math.max(50, Math.round(netWorth(s, p) * 0.1)) : 100; if (!charge(s, p, null, amt, "tax", `${p.name} paid ${money(amt)} in ${t.name}.`)) return; return finish(s); }
+    { const amt = Math.round(owned(s, p.id).reduce((a, j) => a + tileValue(j, s.own[j]), 0) * TAX_RATE);
+      if (!amt){ say(s, `${p.name} owns no property, so there is no tax to pay.`); return finish(s); }
+      if (!charge(s, p, null, amt, "tax", `${p.name} paid ${money(amt)} in ${t.name}.`)) return; return finish(s); }
     case "expo":
       if (owned(s, p.id).some(j => TILES[j].type === "city")){ s.phase = "act"; s.pending = {k:"expo"}; return; }
       say(s, `${p.name} visited the Grand Expo with nothing to show.`); return finish(s);

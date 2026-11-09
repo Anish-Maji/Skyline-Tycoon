@@ -321,7 +321,7 @@ const board = (() => {
       const cc = P(c0[0], c0[1], .005); V.ctx.fillStyle = "#fff"; V.ctx.beginPath(); V.ctx.ellipse(cc[0], cc[1], V.k*.08, V.k*.04, 0, 0, Math.PI*2); V.ctx.fill();
       const nc = along(r, .86); ptext(nc[0], nc[1], e, "CHANCE", .15, 900, "#8a5a20", .9);
     } else if (t.type === "tax"){
-      const nc = along(r, .8); ptext(nc[0], nc[1], e, t.id === "income" ? "INCOME TAX" : "LUXURY TAX", .12, 900, "#6a4a32", .9);
+      const nc = along(r, .8); ptext(nc[0], nc[1], e, "INCOME TAX", .12, 900, "#6a4a32", .9);
     } else if (t.type === "start"){
       for (let k = 0; k < 6; k++) for (let q = 0; q < 2; q++) if ((k + q) % 2 === 0) rect3(r.X0 + .15 + k*.22, r.Y0 + .15 + q*.18, r.X0 + .37 + k*.22, r.Y0 + .33 + q*.18, .003, "#ffffff");
       ptext(r.X0 + .8, r.Y0 + 1.0, "X", "START", .3, 400, "#ffffff", 1.3, "Bungee, sans-serif");
@@ -380,7 +380,7 @@ const board = (() => {
       x.beginPath(); x.moveTo(-k*.42, 0); x.lineTo(-k*.55, -k*.2); x.lineTo(-k*.35, 0); x.closePath(); x.fill(); x.fillStyle = "#cfe8f7"; for (let w = 0; w < 5; w++){ x.beginPath(); x.arc(k*(.05 + w*.07), -k*.02, k*.018, 0, Math.PI*2); x.fill(); } x.restore(); })});
     for (let i = 0; i < N; i++){ const t = TILES[i]; if (t.type === "beach"){ const r = tileRect(i), a = along(r, .42), e = edgeDir(r.side);
       const pp = e === "X" ? [a[0] + .28, a[1]] : [a[0], a[1] + .28]; items.push({dep:pp[0] + pp[1], f:onTile(i, () => palm(pp[0], pp[1], .7))}); } }
-    for (let i of [11, 28]){ const r = tileRect(i), a = along(r, .38); items.push({dep:a[0] + a[1], f:onTile(i, () => { box3(a[0] - .18, a[1] - .14, .36, .28, .16, "#ffffff"); box3(a[0] - .16, a[1] - .12, .32, .24, .06, "#f2e9d8", .16); ptext(a[0], a[1], edgeDir(r.side), "₹", .12, 900, "#c9423a", .3); })}); }
+    for (let i = 0; i < N; i++){ if (TILES[i].type !== "tax") continue; const r = tileRect(i), a = along(r, .38); items.push({dep:a[0] + a[1], f:onTile(i, () => { box3(a[0] - .18, a[1] - .14, .36, .28, .16, "#ffffff"); box3(a[0] - .16, a[1] - .12, .32, .24, .06, "#f2e9d8", .16); ptext(a[0], a[1], edgeDir(r.side), "₹", .12, 900, "#c9423a", .3); })}); }
   }
   /* Money piles, one per seat, next to that seat's corner panel: top-left, top-right, bottom-right, bottom-left */
   const PILES = [{X:-2.2, Y:S/2 - .6}, {X:S/2 - .7, Y:-2.1}, {X:S + .55, Y:S/2 - .5}, {X:S/2 - .8, Y:S + .5}];

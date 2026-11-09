@@ -317,7 +317,7 @@ function buildPopup(s, p){
     lv.appendChild(beachPanel(p.color, n));
     $("brent").innerHTML = `Rent rate: <b>${money(beachRent(n))}</b>`;
     const b = $("bbuy"); b.disabled = p.cash < t.price; b.textContent = b.disabled ? `Not enough money (${money(t.price)})` : `Buy for ${money(t.price)}`; b.onclick = () => closePop({t:"buy"});
-    $("bfoot").innerHTML = `Other players can buy it from you for: <b>${money(2*t.price)}</b>`; $("bskip").textContent = "Not now";
+    $("bfoot").innerHTML = "Beaches can't be bought from you."; $("bskip").textContent = "Not now";
     return;
   }
   const cur = k === "buy" ? 0 : st.l, cap = buildCap(p), step = stepCap(s, cur);
@@ -444,7 +444,7 @@ function rulesHtml(R){
     `Each tycoon starts with ${money(R.startCash)}. Roll two dice and move around the board.${R.lapBonus ? ` Pass Start to collect ${money(R.lapBonus)}.` : ""}`,
     R.directBuild ? "Buy a city's land and up to three houses in one go. Land on it again to build more, then a Hotel." : "Buy a city's land, then build one level each time you land there, up to a Hotel.",
     `On your first lap you can build up to ${LEVEL_NAMES[FIRST_LAP_MAX_LEVEL]}. Pass Start once to unlock ${LEVEL_NAMES[FIRST_LAP_MAX_LEVEL + 1]} and Hotels.`,
-    "Rent doubles when you own a whole color set. Hotels can't be bought out or shaken down by earthquakes.",
+    "Rent doubles when you own a whole color set. Hotels and beaches can't be bought out. Hotels also survive earthquakes.",
     "Land on a rival's city to pay rent, then buy it from them for twice its value if you can afford it.",
     "Beaches pay more the more of them you own.",
     R.doublesAgain ? "Double six: play the tile you land on (buy, build or pay), then roll again. Three double sixes in a row strand you on Lost Island. Any doubles get you off Lost Island." : "Any doubles get you off Lost Island. Double six doesn't give another roll.",
@@ -487,7 +487,7 @@ function showHome(){
     if ($("rejoinBtn")) $("rejoinBtn").onclick = () => { const v = need(); if (v){ ensureAudio(); joinRoom(last, v); } };
   }
   $("offBtn").onclick = () => { nm(); ensureAudio(); app.setup = null; showOfflineSetup(); };
-  if ($("resumeBtn")) $("resumeBtn").onclick = () => { try{ const s = JSON.parse(off); if (s.players.some(p => p.look == null)) throw 0; if (s.endsAt && s.savedAt) s.endsAt += Math.max(0, Date.now() - s.savedAt); ensureAudio(); stopOnline(); app.mode = "offline"; closeSheet(); app.lastRoll = s.rollId; app.lastCard = s.card ? s.card.seq : -1; app.lastOwnCount = Object.keys(s.own).length; app.lastStatus = s.status; setState(s, {reset:true}); }catch(e){ store("skyline.offline", null); $("homeErr").textContent = "That saved game is from an older version. Start a new one."; } };
+  if ($("resumeBtn")) $("resumeBtn").onclick = () => { try{ const s = JSON.parse(off); if (s.players.some(p => p.look == null) || (s.layout && !LAYOUT_SLOTS.every(i => s.layout[i]))) throw 0; if (s.endsAt && s.savedAt) s.endsAt += Math.max(0, Date.now() - s.savedAt); ensureAudio(); stopOnline(); app.mode = "offline"; closeSheet(); app.lastRoll = s.rollId; app.lastCard = s.card ? s.card.seq : -1; app.lastOwnCount = Object.keys(s.own).length; app.lastStatus = s.status; setState(s, {reset:true}); }catch(e){ store("skyline.offline", null); $("homeErr").textContent = "That saved game is from an older version. Start a new one."; } };
 }
 /* Why online play is off for this person, shown under the Host and Join cards */
 const ONLINE_WHY = {

@@ -43,8 +43,9 @@ const FIREBASE_CONFIG = {
 const PCOLORS = ["#e5484d", "#2f7fe0", "#e9a514", "#25a86a"];
 /* ================= REGIONS =================
    Each side of the board is two stacks of three tiles:
-     an inland trio  (three cities, tiles 1-2-4, 9-10-12, 17-19-20)
-     a coastal stack (a beach plus two cities, beach 5 + 6-7, 13 + 14-15, 21 + 22-23, 29 + 30-31).
+     an inland trio  (three cities, tiles 1-2-3, 9-10-12, 17-19-20)
+     a coastal stack (a beach plus its cities: beach 4 + 5-6-7 on the bottom-left, then 13 + 14-15, 21 + 22-23, 29 + 30-31).
+     Chance is at 11, 18 and 27; the one tax tile is at 28.
    The bottom-right side also has one inland pair (25-26) with no beach.
    So keep: three regions with 3 cities, four regions with 2 cities and a beach, and one region with 2 cities and no beach.
    A region is one color set. Its cities always sit together, and a coastal region's beach sits right beside its pair.
@@ -54,7 +55,7 @@ const REGIONS = [
   {id:"east",        name:"East India", color:"#b07a58", tint:"#ead2bf", cities:[["Kolkata","CCU",300], ["Patna","PAT",90], ["Ranchi","RAN",70]]},
   {id:"rajasthan",   name:"Rajasthan", color:"#f0832a", tint:"#f9d5b4", cities:[["Jaipur","JAI",180], ["Udaipur","UDR",120], ["Jaisalmer","JSA",90]]},
   {id:"capital",     name:"the Capital Region", color:"#34507e", tint:"#c4cfe3", cities:[["Delhi","DEL",400], ["Gurugram","GGN",230], ["Lucknow","LKO",160]]},
-  {id:"maharashtra", name:"Maharashtra", color:"#d4468c", tint:"#f3c6dc", cities:[["Mumbai","BOM",450], ["Pune","PNQ",260]], beach:["Juhu Beach","JUH"]},
+  {id:"maharashtra", name:"Maharashtra", color:"#d4468c", tint:"#f3c6dc", cities:[["Mumbai","BOM",450], ["Pune","PNQ",260], ["Nashik","ISK",170]], beach:["Juhu Beach","JUH"]},
   {id:"tamilnadu",   name:"Tamil Nadu", color:"#1f9c8c", tint:"#bfe5df", cities:[["Chennai","MAA",290], ["Coimbatore","CBE",110]], beach:["Marina Beach","MAR"]},
   {id:"kerala",      name:"Kerala", color:"#c9b11a", tint:"#efe6a8", cities:[["Kochi","COK",150], ["Trivandrum","TRV",130]], beach:["Kovalam Beach","KOV"]},
   {id:"gujarat",     name:"Gujarat", color:"#3fb0de", tint:"#c6e7f5", cities:[["Ahmedabad","AMD",210], ["Surat","STV",130]], beach:["Mandvi Beach","MDV"]},
@@ -69,21 +70,23 @@ function B(id){ const [name, code] = region(id).beach; return {type:"beach", nam
 /* The board before shuffling */
 const TILES = [
   {type:"start", name:"Start", code:"GO"},
-  C("east",0), C("east",1), {type:"fortune",name:"Chance",code:"?"}, C("east",2),
-  B("maharashtra"), C("maharashtra",0), C("maharashtra",1),
+  C("east",0), C("east",1), C("east",2),
+  B("maharashtra"), C("maharashtra",0), C("maharashtra",1), C("maharashtra",2),
   {type:"jail", name:"Lost Island", code:"ISLE"},
-  C("rajasthan",0), C("rajasthan",1), {type:"tax",id:"income",name:"Income Tax",code:"TAX"}, C("rajasthan",2),
+  C("rajasthan",0), C("rajasthan",1), {type:"fortune",name:"Chance",code:"?"}, C("rajasthan",2),
   B("tamilnadu"), C("tamilnadu",0), C("tamilnadu",1),
   {type:"expo", name:"Grand Expo", code:"EXPO"},
   C("capital",0), {type:"fortune",name:"Chance",code:"?"}, C("capital",1), C("capital",2),
   B("kerala"), C("kerala",0), C("kerala",1),
   {type:"jet", name:"Airport", code:"AIR"},
-  C("deccan",0), C("deccan",1), {type:"fortune",name:"Chance",code:"?"}, {type:"tax",id:"lux",name:"Luxury Tax",code:"TAX"},
+  C("deccan",0), C("deccan",1), {type:"fortune",name:"Chance",code:"?"}, {type:"tax",id:"income",name:"Income Tax",code:"TAX"},
   B("gujarat"), C("gujarat",0), C("gujarat",1)
 ];
 /* Every new game shuffles the regions and moves each price by up to PRICE_JITTER (.15 = 15%). Set SHUFFLE_CITIES to false to keep the board above. */
 const SHUFFLE_CITIES = true, PRICE_JITTER = .15;
-const SIDES = [[1,2,4,6,7],[9,10,12,14,15],[17,19,20,22,23],[25,26,30,31]];
+/* The one tax tile charges this share of what all your cities and beaches are worth (what you paid for them). No property, no tax. */
+const TAX_RATE = .1;
+const SIDES = [[1,2,3,5,6,7],[9,10,12,14,15],[17,19,20,22,23],[25,26,30,31]];
 /* Chance cards. kind is "good" (Boost), "bad" (Setback) or "world" (World event); it sets the card's label and color.
    Every card is equally likely. List a card twice to make it more common. */
 /* Chance cards. "title" is the ribbon on the card, "text" sits under the picture. The pictures are drawn in js/cards.js. */

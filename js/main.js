@@ -188,7 +188,7 @@ function watchFx(code){
     if (!snap.exists) return; const f = snap.data(); if (!f || !(f.at > fxSeen) || Date.now() - f.at > 5000) return; fxSeen = f.at;
     if (f.from === app.me) return; const s = app.s; if (!s) return;
     const a = s.players.findIndex(p => p.id === f.from), b = s.players.findIndex(p => p.id === f.to); if (a >= 0 && b >= 0) playTomato(a, b);
-  }, () => {}); }catch(e){}
+  }, () => { fxUnsub = null; setTimeout(() => { if (app.code === code && !fxUnsub) watchFx(code); }, 15000); }); }catch(e){}   // refused or dropped: try again in 15 s
 }
 /* Full amounts can get long: shrink a corner panel's cash text until it fits */
 function fitCash(){ document.querySelectorAll(".cp-cash").forEach(e => { e.style.fontSize = ""; let f = parseFloat(getComputedStyle(e).fontSize); while (e.scrollWidth > e.clientWidth && f > 9){ f -= 1; e.style.fontSize = f + "px"; } }); }

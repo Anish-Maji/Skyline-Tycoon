@@ -332,3 +332,6 @@ body{margin:0;background:var(--stage);color:var(--ink);font-family:var(--body);f
 @keyframes sbShine{to{transform:translateX(100%)}}
 @keyframes sbPunch{from{transform:scale(1.8);opacity:0}to{transform:none;opacity:1}}
 @media (prefers-reduced-motion:reduce){.setbanner.show .sb-band,.setbanner.show .sb-title,.setbanner.show .sb-sub,.setbanner.show .sb-band::after{animation:none}}
+
+/* Gift a city: one button per rival, edged in their color */
+.btn.gift-to{box-shadow:inset 0 0 0 3px var(--pc)}

@@ -101,7 +101,7 @@ function render(){
 }
 /* What the current player is deciding, shown in a thought bubble over their head so everyone can follow along */
 const THINKING = {buy:"Thinking about buying", upgrade:"Thinking about building", takeover:"Thinking about a buyout",
-  expo:"Picking an Expo city", freebuild:"Picking a city to build", forcebuy:"Picking a city to buy", demolish:"Picking a building to knock down", debt:"Working out how to pay"};
+  expo:"Picking an Expo city", freebuild:"Picking a city to build", forcebuy:"Picking a city to buy", demolish:"Picking a building to knock down", gift:"Picking who gets a city", debt:"Working out how to pay"};
 function thinkingText(s){
   if (s.status !== "playing") return null;
   if (s.phase === "fly") return "Picking where to fly";
@@ -145,10 +145,10 @@ addEventListener("resize", fitCash);
 /* ---------- Chance pick timer ----------
    Free build, Force sale and Demolition can't be skipped. The player has PICK_MS to choose a city;
    then a random one from the glowing cities is picked for them. The countdown shows under the buttons. */
-const PICK_MS = 25000;
+const PICK_MS = 25000, PICK_MS_BY = {gift:40000};   // Gift a city gets longer: pick a city and a player
 const pickTimer = {key:null, until:0};
 function startPickTimer(s, k){
-  const key = s.rev + ":" + k; if (pickTimer.key !== key){ pickTimer.key = key; pickTimer.until = Date.now() + PICK_MS; }
+  const key = s.rev + ":" + k; if (pickTimer.key !== key){ pickTimer.key = key; pickTimer.until = Date.now() + (PICK_MS_BY[k] || PICK_MS); }
   const t = document.createElement("div"); t.className = "pick-timer"; t.id = "pickTimer"; $("actions").appendChild(t); tickPick();
 }
 function tickPick(){
@@ -195,6 +195,15 @@ function renderActions(){
       const sl = document.createElement("select"); sl.id = "expoSel"; sl.setAttribute("aria-label", "Expo city");
       mine.forEach(j => { const o = document.createElement("option"); o.value = j; o.textContent = `${TILES[j].name} · ${money(rentOf(s, j))}`; sl.appendChild(o); });
       box.appendChild(sl); box.appendChild(btn("Host here", () => dispatch({t:"expo", tile:+sl.value})));
+    } else if (k === "gift"){
+      /* Gift a city: pick one of your cities (tap it or use the list), then tap the player who gets it */
+      const opts = giftOptions(s, p).sort((a, b) => tileValue(a, s.own[a]) - tileValue(b, s.own[b])); board.setSelectable(new Set(opts));
+      tell("Gift a city. Pick one of your cities, then tap who gets it.");
+      const sl = document.createElement("select"); sl.id = "giftSel"; sl.setAttribute("aria-label", "City to give away");
+      opts.forEach(j => { const o = document.createElement("option"); o.value = j; o.textContent = `${TILES[j].name} · ${LEVEL_NAMES[s.own[j].l]}`; sl.appendChild(o); });
+      box.appendChild(sl);
+      giftTargets(s, p).forEach(o => { const b = btn("Give to " + o.name, () => dispatch({t:"gift", tile:+sl.value, to:o.id})); b.classList.add("gift-to"); b.style.setProperty("--pc", o.color); box.appendChild(b); });
+      startPickTimer(s, "gift");
     } else if (k === "demolish"){
       const opts = demolishOptions(s, p); board.setSelectable(new Set(opts));
       tell("Demolition. Tap a glowing rival city to knock its building down one level.");
@@ -368,6 +377,7 @@ board.onClick(i => {
   if (p && canControl(p) && !board.busy() && !app.writing){
     if (s.phase === "fly" && i !== 24 && i !== 8){ dispatch({t:"fly", tile:i}); return; }
     if (s.phase === "act" && s.pending && s.pending.k === "debt"){ if (s.own[i] && s.own[i].o === p.id && performance.now() >= debtUI.until) toggleSell(i); return; }
+    if (s.phase === "act" && s.pending && s.pending.k === "gift" && giftOptions(s, p).includes(i)){ const sl = $("giftSel"); if (sl){ sl.value = i; sfx("hop"); } return; }
     if (s.phase === "act" && s.pending && s.pending.k === "demolish" && demolishOptions(s, p).includes(i)){ dispatch({t:"demolish", tile:i}); return; }
     if (s.phase === "act" && s.pending && (s.pending.k === "freebuild" || s.pending.k === "forcebuy") && (s.pending.k === "freebuild" ? freeBuildOptions(s, p) : forceSaleOptions(s, p)).includes(i)){ dispatch({t:s.pending.k, tile:i}); return; }
     if (s.phase === "act" && s.pending && s.pending.k === "expo" && s.own[i] && s.own[i].o === p.id && TILES[i].type === "city"){ dispatch({t:"expo", tile:i}); return; }

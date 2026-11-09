@@ -110,6 +110,15 @@ const CARD_ART = {
     cRound(c, x + 26, y + 34, 38, 14, 4); cFill(c, "#8a5a34", INK, 2.5);
     c.save(); c.translate(x + 50, y + 34); c.rotate(-.6); cRound(c, -8, -40, 16, 36, 4); cFill(c, "#a06a3c", INK, 2.5); c.restore();
   },
+  gift(c, x, y){
+    /* a wrapped present with a little house peeking out of the open lid */
+    cRound(c, x - 48, y - 4, 96, 56, 6); cFill(c, "#e5484d", INK, 3);
+    c.fillStyle = "#ffd23f"; c.fillRect(x - 9, y - 4, 18, 56); c.strokeStyle = INK; c.lineWidth = 2; c.strokeRect(x - 9, y - 4, 18, 56);
+    cPoly(c, [[x - 22, y - 50], [x + 4, y - 72], [x + 30, y - 50]], "#2f7fe0", INK, 3);
+    cRound(c, x - 18, y - 50, 44, 40, 3); cFill(c, "#fffaf2", INK, 3); cRound(c, x - 2, y - 32, 12, 22, 2); cFill(c, "#8a5a34", INK, 2);
+    c.save(); c.translate(x - 30, y - 14); c.rotate(-.35); cRound(c, -30, -10, 66, 16, 4); cFill(c, "#e5484d", INK, 3); c.fillStyle = "#ffd23f"; c.fillRect(-4, -10, 14, 16); c.restore();
+    cPoly(c, [[x + 30, y - 22], [x + 52, y - 40], [x + 58, y - 18]], "#ffd23f", INK, 2.5); cPoly(c, [[x + 30, y - 22], [x + 10, y - 44], [x + 6, y - 22]], "#ffd23f", INK, 2.5);
+  },
   demolish(c, x, y){
     c.fillStyle = "#8a5a34"; c.fillRect(x - 90, y + 44, 180, 8);
     cRound(c, x + 4, y - 44, 56, 88, 4); cFill(c, "#b8c2c9", INK, 3);

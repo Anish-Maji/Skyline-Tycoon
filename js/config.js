@@ -103,6 +103,7 @@ const CARDS = [
   {id:"blackout",  kind:"bad",   title:"Blackout",            text:"A random city collects no rent for 2 rounds."},
   {id:"fine",      kind:"bad",   title:"Fine",                text:"Pay ₹100K to the bank."},
   {id:"back",      kind:"bad",   title:"Wrong exit",          text:"Go back 3 tiles."},
+  {id:"gift",      kind:"bad",   title:"Gift a city",         text:"Give one of your cities to a rival of your choice."},
   {id:"epidemic",  kind:"world", title:"Epidemic",            text:"Rent in one region is halved for 2 rounds."},
   {id:"forcesale", kind:"world", title:"Force sale",          text:"Buy any rival city that isn't a Hotel at its normal value."},
   {id:"jet",       kind:"world", title:"World tour",          text:"Go to the Airport and fly anywhere next turn."},

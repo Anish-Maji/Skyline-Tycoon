@@ -195,7 +195,10 @@ function forceSaleOptions(s, p){ return Object.keys(s.own).map(Number).filter(i 
 /* Rival cities with at least House 1 that the Demolition card can knock down one level. Hotels count too. */
 function demolishOptions(s, p){ return Object.keys(s.own).map(Number).filter(i => { const st = s.own[i], o = byId(s, st.o); return TILES[i].type === "city" && st.o !== p.id && o && !o.bankrupt && st.l >= 2; }); }
 /* Chance cards that make you pick a city. They can't be skipped: if time runs out, a random city is picked. */
-const CHANCE_PICKS = {freebuild:freeBuildOptions, forcebuy:forceSaleOptions, demolish:demolishOptions};
+/* Cities p can give away with the Gift a city card (any of their cities, Hotels too), and the rivals who can receive one */
+function giftOptions(s, p){ return owned(s, p.id).filter(i => TILES[i].type === "city"); }
+function giftTargets(s, p){ return s.players.filter(o => o.id !== p.id && !o.bankrupt); }
+const CHANCE_PICKS = {freebuild:freeBuildOptions, forcebuy:forceSaleOptions, demolish:demolishOptions, gift:giftOptions};
 function chanceOptions(s, p, k){ return CHANCE_PICKS[k] ? CHANCE_PICKS[k](s, p) : []; }
 function drawCard(s, p){
   const c = CARDS[Math.floor(Math.random()*CARDS.length)], until = (s.round || 1) + EVENT_ROUNDS;
@@ -237,6 +240,10 @@ function drawCard(s, p){
       if (forceSaleOptions(s, p).length){ s.phase = "act"; s.pending = {k:"forcebuy"}; return; }
       say(s, `${p.name} has no rival city to force-buy right now.`); return finish(s);
     case "jet": jumpTo(s, p, 24, true); return resolve(s, p);
+    case "gift":
+      if (!giftOptions(s, p).length || !giftTargets(s, p).length){ say(s, `${p.name} has no city to give away.`); return finish(s); }
+      if (shielded(s, p, "city gift")) return finish(s);
+      s.phase = "act"; s.pending = {k:"gift"}; return;
     case "demolish":
       if (demolishOptions(s, p).length){ s.phase = "act"; s.pending = {k:"demolish"}; return; }
       say(s, `${p.name} has no rival building to knock down.`); return finish(s);
@@ -374,6 +381,13 @@ function act(s0, a){
       if (!shielded(s, owner, `demolition in ${TILES[a.tile].name}`)){ st.l--; say(s, `${p.name} knocked down ${owner.name}'s ${was} in ${TILES[a.tile].name}. It is now ${LEVEL_NAMES[st.l]}.`); }
       finish(s); break;
     }
+    case "gift": {   // a.tile: one of your cities, a.to: who gets it (if missing, a random rival)
+      if (s.phase !== "act" || !s.pending || s.pending.k !== "gift") return E("Nothing to give away.");
+      if (!giftOptions(s, p).includes(a.tile)) return E("Pick one of your cities.");
+      const rivals = giftTargets(s, p), to = rivals.find(o => o.id === a.to) || (a.to ? null : pickOne(rivals));
+      if (!to) return E("Pick another player.");
+      s.own[a.tile].o = to.id; say(s, `${p.name} gave ${TILES[a.tile].name} (${LEVEL_NAMES[s.own[a.tile].l]}) to ${to.name}.`); finish(s); break;
+    }
     case "forcebuy": {
       if (s.phase !== "act" || !s.pending || s.pending.k !== "forcebuy") return E("Nothing to buy.");
       if (!forceSaleOptions(s, p).includes(a.tile)) return E("You can't buy that city.");
@@ -434,6 +448,8 @@ function botAction(s){
     if (k === "takeover"){ const g = t.g; const help = g && TILES.some((u, j) => u.g === g && j !== i && s.own[j] && s.own[j].o === p.id); return (s.pending.cost <= p.cash - 300 && (help || Math.random() < .45)) ? {t:"takeover"} : {t:"skip"}; }
     if (k === "debt") return {t:"autosell"};
     if (k === "freebuild"){ const o = freeBuildOptions(s, p).sort((a, b) => TILES[b].price - TILES[a].price); return o.length ? {t:"freebuild", tile:o[0]} : {t:"skip"}; }
+    if (k === "gift"){ const o = giftOptions(s, p).sort((a, b) => tileValue(a, s.own[a]) - tileValue(b, s.own[b])), r = giftTargets(s, p).sort((a, b) => a.cash - b.cash);
+      return o.length && r.length ? {t:"gift", tile:o[0], to:r[0].id} : {t:"skip"}; }
     if (k === "demolish"){ const o = demolishOptions(s, p).sort((a, b) => rentOf(s, b) - rentOf(s, a)); return o.length ? {t:"demolish", tile:o[0]} : {t:"skip"}; }
     if (k === "forcebuy"){ const all = forceSaleOptions(s, p); if (!all.length) return {t:"skip"};
       const o = all.filter(j => tileValue(j, s.own[j]) <= p.cash - 300).sort((a, b) => rentOf(s, b) - rentOf(s, a));

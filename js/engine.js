@@ -276,7 +276,8 @@ function resolve(s, p){
       if (owned(s, p.id).some(j => TILES[j].type === "city")){ s.phase = "act"; s.pending = {k:"expo"}; return; }
       say(s, `${p.name} visited the Grand Expo with nothing to show.`); return finish(s);
     case "jet": p.flight = true; say(s, `${p.name} checked in at the Airport. Next turn they can fly anywhere.`); return finish(s);
-    case "jail": say(s, `${p.name} is just visiting Lost Island.`); return finish(s);
+    /* Landing on Lost Island strands you: roll doubles, pay the boat or use an escape card to leave (third try: pay and go) */
+    case "jail": p.jail = 1; p.flight = false; s.extra = false; say(s, `${p.name} washed up on Lost Island.`); return finish(s);
     default: return finish(s);
   }
 }
@@ -303,12 +304,13 @@ function act(s0, a){
         else if (p.jail >= 3){ p.jail = 0; if (!charge(s, p, null, BAIL, "boat", `${p.name} paid ${money(BAIL)} for a boat after three tries.`, {k:"walk", n:d1+d2})) break; if (p.bankrupt){ finish(s); break; } walk(s, p, d1+d2); }
         else { p.jail++; say(s, `${p.name} rolled ${d1}+${d2} and stays on Lost Island.`); finish(s); break; }
       } else {
-        /* Only double six gives another roll (any doubles still get you off Lost Island, above) */
-        const sixes = d1 === 6 && d2 === 6 && rules(s).doublesAgain;
-        if (sixes){ s.doubles = (s.doubles||0) + 1;
-          if (s.doubles >= 3){ say(s, `${p.name} rolled double six three times in a row and washed up on Lost Island.`); sendJail(s, p); finish(s); break; }
+        /* Any doubles: play the tile, then roll again. Three doubles in a row strand you on Lost Island.
+           (Doubles that get you off Lost Island, above, don't give another roll.) */
+        const again = dbl && rules(s).doublesAgain;
+        if (again){ s.doubles = (s.doubles||0) + 1;
+          if (s.doubles >= 3){ say(s, `${p.name} rolled doubles three times in a row and washed up on Lost Island.`); sendJail(s, p); finish(s); break; }
           s.extra = true; }
-        say(s, `${p.name} rolled ${d1}+${d2}${sixes ? ", double six" : ""}.`);
+        say(s, `${p.name} rolled ${d1}+${d2}${again ? ", doubles" : ""}.`);
         walk(s, p, d1+d2);
       }
       resolve(s, p); break;
@@ -322,7 +324,7 @@ function act(s0, a){
       p.passes--; p.jail = 0; say(s, `${p.name} used a rescue boat pass.`); break;
     case "fly": {
       if (s.phase !== "fly") return E("You can't fly now.");
-      const to = a.tile; if (!(to >= 0 && to < N) || to === 24) return E("Pick a different tile.");
+      const to = a.tile; if (!(to >= 0 && to < N) || to === 24 || to === 8) return E("Pick a different tile.");   // no flights to the Airport itself or to Lost Island
       p.flight = false; say(s, `${p.name} flew to ${TILES[to].name}.`); jumpTo(s, p, to, true); resolve(s, p); break;
     }
     case "noFly":
@@ -415,7 +417,7 @@ function botAction(s){
   if (s.phase === "roll"){ if (p.jail){ if (p.passes) return {t:"pass"}; if (p.cash > 500) return {t:"bail"}; } return {t:"roll"}; }
   if (s.phase === "fly"){
     let best = null, score = -1;
-    TILES.forEach((t, i) => { if (i === 24) return; if ((t.type === "city" || t.type === "beach") && !s.own[i] && t.price <= p.cash - 150 && t.price > score){ score = t.price; best = i; } });
+    TILES.forEach((t, i) => { if (i === 24 || i === 8) return; if ((t.type === "city" || t.type === "beach") && !s.own[i] && t.price <= p.cash - 150 && t.price > score){ score = t.price; best = i; } });
     if (best == null && rules(s).botBuild){ const mine = owned(s, p.id).filter(i => upgradeOptions(s, p, i).length); if (mine.length) best = mine[0]; }
     return best == null ? {t:"noFly"} : {t:"fly", tile:best};
   }

@@ -189,7 +189,7 @@ const board = (() => {
     const first = !state || (opts && opts.reset); state = s; if (opts && opts.reset){ flights.length = 0; moneyCount = null; }
     let walkAt = performance.now();
     if (first){ lastRollId = s.rollId; diceRest(s); }
-    else if (s.rollId !== lastRollId){ lastRollId = s.rollId; throwDice(s); walkAt += reduce.matches ? 0 : DICE_TOTAL; }
+    else if (s.rollId !== lastRollId){ lastRollId = s.rollId; throwDice(s); walkAt += reduce.matches ? 0 : diceTotal(); }
     if (!first) popNewBuildings(s); else prevLevels = levelsOf(s);
     s.players.forEach(p => {
       const d = disp[p.id];
@@ -502,6 +502,10 @@ const board = (() => {
   const DICE_MS = 1150, DIE = .3;                       // throw time, and half the die size in board units
   const DICE_HOLD = 750, DICE_FADE = 250;               // how long the dice stay after landing, then fade away before the walk
   const DICE_TOTAL = DICE_MS + DICE_HOLD + DICE_FADE;
+  /* Doubles: the dice stay longer (DOUBLE_HOLD) while the DOUBLE word zooms in beside them and vanishes in a cloud puff (DOUBLE_FX_MS) */
+  const DOUBLE_HOLD = 1500, DOUBLE_FX_MS = 1350;
+  let diceHold = DICE_HOLD, doubleFx = null;
+  const diceTotal = () => DICE_MS + diceHold + DICE_FADE;
   const DICE_REST = [[S*.515 - .55, S*.515 + .55], [S*.515 + .55, S*.515 - .55]];   // where the two dice settle, just above the buttons
   let lastRollId = null, diceUntil = 0;
   const dice = [{}, {}];
@@ -527,16 +531,18 @@ const board = (() => {
   function throwDice(s){
     const seat = Math.max(0, s.players.findIndex(p => p.id === s.roller)), pile = PILES[seat] || PILES[2], now = performance.now();
     moneyCount = null;   // a new roll clears the last amount
+    const dd = s.dice || [0, 0], isDbl = dd[0] === dd[1] && dd[0] > 0;
+    diceHold = isDbl && !reduce.matches ? DOUBLE_HOLD : DICE_HOLD; doubleFx = isDbl ? {at:now + (reduce.matches ? 0 : DICE_MS)} : null;
     (s.dice || [3, 4]).forEach((v, i) => {
       const r = rand(1013 + i*577 + (s.rollId || 0)*131);
       const ax = [r() - .5, r() - .5, r() - .5], L = Math.hypot(...ax) || 1;
       const X1 = DICE_REST[i][0] + (r() - .5)*.5, Y1 = DICE_REST[i][1] + (r() - .5)*.5;
       dice[i] = {X0:pile.X + .8 + (i ? .5 : -.5)*.6, Y0:pile.Y + .5 + (i ? -.5 : .5)*.6, X1, Y1, Rf:faceUp(v, r()*1.4 - .7), axis:ax.map(a => a/L), spin:(5 + r()*3)*Math.PI, t0:now + i*60};
     });
-    diceUntil = now + (reduce.matches ? 0 : DICE_TOTAL + 40); if (!reduce.matches) diceSettled = false;
+    diceUntil = now + (reduce.matches ? 0 : diceTotal() + 40); if (!reduce.matches) diceSettled = false;
     /* the total shows over the dice when they land, and on the tile the player is heading to, until they get there */
     const lm = s.lastMove, target = lm && lm.pid === s.roller && lm.kind === "walk" ? lm.to : null;
-    counter = {sum:(s.dice || [0, 0])[0] + (s.dice || [0, 0])[1], at:now + (reduce.matches ? 0 : DICE_MS), walkAt:now + (reduce.matches ? 0 : DICE_TOTAL), pid:s.roller, tile:target};
+    counter = {sum:(s.dice || [0, 0])[0] + (s.dice || [0, 0])[1], at:now + (reduce.matches ? 0 : DICE_MS), walkAt:now + (reduce.matches ? 0 : diceTotal()), pid:s.roller, tile:target};
   }
   let diceSettled = true, counter = null;
   function drawDice(now){
@@ -545,7 +551,7 @@ const board = (() => {
     dice.forEach(d => {
       if (d.Rf == null) return;
       const u = reduce.matches ? 1 : Math.max(0, Math.min(1, (now - d.t0)/DICE_MS)); if (u < 1) landed = false;
-      const gone = now - (d.t0 + DICE_MS + DICE_HOLD); if (gone >= DICE_FADE) return;   // faded away
+      const gone = now - (d.t0 + DICE_MS + diceHold); if (gone >= DICE_FADE) return;   // faded away
       V.ctx.save(); V.ctx.globalAlpha = gone > 0 ? 1 - gone/DICE_FADE : 1;
       const e = 1 - Math.pow(1 - u, 3);                                     // fast out, slow settle
       const X = d.X0 + (d.X1 - d.X0)*e, Y = d.Y0 + (d.Y1 - d.Y0)*e;
@@ -565,8 +571,27 @@ const board = (() => {
       });
       V.ctx.restore();
     });
-    drawCounter(now);
-    if (landed && !diceSettled){ diceSettled = true; sfx("hop"); }
+    drawCounter(now); drawDouble(now);
+    if (landed && !diceSettled){ diceSettled = true; sfx(doubleFx ? "double" : "hop"); }
+  }
+  /* DOUBLE: big red word that zooms in to the left of the dice, holds, then bursts into a white cloud and is gone */
+  function drawDouble(now){
+    const F = doubleFx; if (!F || now < F.at) return; const el = now - F.at; if (el > DOUBLE_FX_MS){ doubleFx = null; return; }
+    const c = V.ctx, mid = (DICE_REST[0][0] + DICE_REST[1][0])/2, [dx, dy] = P(mid, mid, .5), fs = Math.max(22, V.k*.62);
+    c.font = `400 ${fs}px Bungee, sans-serif`; const half = c.measureText("DOUBLE").width/2 + 10;
+    const x = Math.max(half, dx - fs*2.7), y = dy;   // left of the dice, but never off the left edge on a narrow screen
+    const IN = 260, PUFF = 950;   // zoom-in time, and when the cloud starts
+    const zin = Math.min(1, el/IN), sc = 2.4 - 1.4*(1 - Math.pow(1 - zin, 3));
+    const alpha = el < IN ? zin : el < PUFF + 150 ? 1 : Math.max(0, 1 - (el - PUFF - 150)/250);
+    if (el > PUFF){ const u = Math.min(1, (el - PUFF)/(DOUBLE_FX_MS - PUFF));   // the cloud: soft white puffs that swell and fade
+      c.save(); c.globalAlpha = (1 - u)*.95; c.fillStyle = "#ffffff";
+      [[-1.9, .05, .55], [-1.1, -.28, .7], [-.2, -.34, .78], [.8, -.25, .7], [1.7, .02, .58], [-1.2, .3, .6], [.1, .36, .66], [1.1, .3, .6]].forEach(([ox, oy, r]) => {
+        c.beginPath(); c.arc(x + ox*fs*(1 + u*.35), y + oy*fs*(1 + u*.6), r*fs*(.55 + u*.65), 0, Math.PI*2); c.fill(); });
+      c.restore(); }
+    c.save(); c.globalAlpha = alpha; c.translate(x, y); c.scale(sc, sc);
+    c.font = `400 ${fs}px Bungee, sans-serif`; c.textAlign = "center"; c.textBaseline = "middle"; c.lineJoin = "round";
+    c.lineWidth = Math.max(4, fs*.26); c.strokeStyle = "#ffffff"; c.strokeText("DOUBLE", 0, 0);
+    c.fillStyle = "#e4245a"; c.fillText("DOUBLE", 0, 0); c.restore();
   }
   /* The roll total: a white box over the dice, and a round badge on the tile the player is walking to.
      Both appear when the dice land and go away when the player arrives. */

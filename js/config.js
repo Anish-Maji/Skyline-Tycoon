@@ -20,7 +20,7 @@ const FESTIVALS = {count:3, rentMult:2};
    islandRent      players stuck on Lost Island still collect rent
    botBuild        bots build houses and Hotels (No: bots only buy land)
    directBuild     build several levels in one visit (No: one level each time you land)
-   doublesAgain    roll again after double six (any doubles still get you off Lost Island) */
+   doublesAgain    roll again after any doubles (doubles also get you off Lost Island) */
 const DEFAULT_SETTINGS = {playTime:60, startCash:START_CASH, lapBonus:GO_BONUS, festivals:FESTIVALS.count,
   lineMonopoly:false, tripleMonopoly:true, beachMonopoly:true, islandRent:true, botBuild:true, directBuild:true, doublesAgain:true};
 /* Slider ranges in the Quick settings panel, and the play time choices (0 = no limit) */

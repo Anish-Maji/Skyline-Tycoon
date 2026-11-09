@@ -180,12 +180,12 @@ function renderActions(){
   if (board.busy() || app.writing || cardBusy()) return;
   if (s.phase === "roll"){
     if (p.jail){ tell(`Stranded on Lost Island (try ${p.jail} of 3). Roll doubles or pay ${money(BAIL)} for a boat.`); box.appendChild(btn("Roll for doubles", () => dispatch({t:"roll"}))); if (p.cash >= BAIL) box.appendChild(btn(`Pay ${money(BAIL)}`, () => dispatch({t:"bail"}), "ghost")); if (p.passes) box.appendChild(btn("Use pass", () => dispatch({t:"pass"}), "ghost")); }
-    else { if (s.doubles) tell("Double six. Roll again."); box.appendChild(btn("Roll dice", () => dispatch({t:"roll"}), "big")); }
+    else { if (s.doubles) tell("Doubles! Roll again."); box.appendChild(btn("Roll dice", () => dispatch({t:"roll"}), "big")); }
   } else if (s.phase === "fly"){
     tell("Flight ready. Tap a tile or pick one here.");
-    board.setSelectable(new Set(TILES.map((t, i) => i).filter(i => i !== 24)));
+    board.setSelectable(new Set(TILES.map((t, i) => i).filter(i => i !== 24 && i !== 8)));
     const sl = document.createElement("select"); sl.id = "flySel"; sl.setAttribute("aria-label", "Destination");
-    TILES.forEach((t, i) => { if (i === 24) return; const o = document.createElement("option"); o.value = i; o.textContent = t.name + (s.own[i] ? ` (${byId(s, s.own[i].o).name})` : t.price ? ` · ${money(t.price)}` : ""); sl.appendChild(o); });
+    TILES.forEach((t, i) => { if (i === 24 || i === 8) return; const o = document.createElement("option"); o.value = i; o.textContent = t.name + (s.own[i] ? ` (${byId(s, s.own[i].o).name})` : t.price ? ` · ${money(t.price)}` : ""); sl.appendChild(o); });
     box.appendChild(sl); box.appendChild(btn("Fly", () => dispatch({t:"fly", tile:+sl.value}))); box.appendChild(btn("Skip", () => dispatch({t:"noFly"}), "ghost"));
   } else if (s.phase === "act" && s.pending){
     const k = s.pending.k;
@@ -366,7 +366,7 @@ board.onClick(i => {
   const s = app.s; if (!s) return;
   const p = s.status === "playing" ? s.players[s.turn] : null;
   if (p && canControl(p) && !board.busy() && !app.writing){
-    if (s.phase === "fly" && i !== 24){ dispatch({t:"fly", tile:i}); return; }
+    if (s.phase === "fly" && i !== 24 && i !== 8){ dispatch({t:"fly", tile:i}); return; }
     if (s.phase === "act" && s.pending && s.pending.k === "debt"){ if (s.own[i] && s.own[i].o === p.id && performance.now() >= debtUI.until) toggleSell(i); return; }
     if (s.phase === "act" && s.pending && s.pending.k === "demolish" && demolishOptions(s, p).includes(i)){ dispatch({t:"demolish", tile:i}); return; }
     if (s.phase === "act" && s.pending && (s.pending.k === "freebuild" || s.pending.k === "forcebuy") && (s.pending.k === "freebuild" ? freeBuildOptions(s, p) : forceSaleOptions(s, p)).includes(i)){ dispatch({t:s.pending.k, tile:i}); return; }
@@ -395,15 +395,19 @@ function writeError(e){
 }
 let botTimer = null, botKey = null;
 const BOT_THINK_MS = 1700;   // how long a bot "thinks" over a decision, so its thought bubble shows
+/* After doubles, once the tile has played out (walk, buying, cash, Chance card), a bot waits this long before rolling again */
+const DOUBLES_PAUSE_MS = 1600;
 function scheduleBot(){
   const s = app.s; if (!s || s.status !== "playing") return;
   const p = s.players[s.turn]; if (!p.bot) return;
   if (app.mode === "online" && !isDriver()) return;
   if (app.mode !== "online" && app.mode !== "offline") return;
   const key = s.rev + ":" + s.turn; if (botKey === key) return; botKey = key; clearTimeout(botTimer);
+  const again = s.phase === "roll" && s.doubles > 0 && !p.jail; let paused = false;   // the extra roll after doubles
   botTimer = setTimeout(function tick(){
     if (!app.s || app.s.rev + ":" + app.s.turn !== key) return;
     if (board.busy() || app.writing || cardBusy()){ botTimer = setTimeout(tick, 150); return; }
+    if (again && !paused){ paused = true; botTimer = setTimeout(tick, DOUBLES_PAUSE_MS); return; }
     botKey = null; dispatch(botAction(app.s), true);
   }, s.phase === "act" || s.phase === "fly" ? BOT_THINK_MS : 850);
 }
@@ -447,7 +451,8 @@ function rulesHtml(R){
     "Rent doubles when you own a whole color set. Hotels and beaches can't be bought out. Hotels also survive earthquakes.",
     "Land on a rival's city to pay rent, then buy it from them for twice its value if you can afford it.",
     "Beaches pay more the more of them you own.",
-    R.doublesAgain ? "Double six: play the tile you land on (buy, build or pay), then roll again. Three double sixes in a row strand you on Lost Island. Any doubles get you off Lost Island." : "Any doubles get you off Lost Island. Double six doesn't give another roll.",
+    R.doublesAgain ? "Doubles: play the tile you land on (buy, build, pay or draw a Chance card), then roll again. Three doubles in a row strand you on Lost Island. Doubles also get you off Lost Island." : "Doubles get you off Lost Island. They don't give another roll.",
+    `Landing on Lost Island strands you. Roll doubles, pay ${money(BAIL)} for a boat or use an escape card to leave. After three failed rolls you pay and go.`,
     !R.islandRent && "Players stuck on Lost Island can't collect rent.",
     R.festivals && `Every game starts with festivals in ${R.festivals === 1 ? "one random city" : R.festivals + " random cities"}. They last the whole game and double the rent there.`,
     "Chance cards can be Boosts (shield, free build, tax exemption, escape card), Setbacks (earthquake, blackout, fines) or World events (epidemic, force sale, world tour, demolition).",
@@ -653,7 +658,7 @@ const QS_TOGGLES = [
   ["islandRent", "Can players stuck on Lost Island collect rent?", ""],
   ["botBuild", "Can bots build?", "No: bots only buy land"],
   ["directBuild", "Build many levels in one visit?", "No: one level each time you land"],
-  ["doublesAgain", "Roll again after double six?", "Yes: play the tile you land on, then roll again"]];
+  ["doublesAgain", "Roll again after doubles?", "Yes: play the tile you land on, then roll again"]];
 const QS_SLIDERS = [["startCash", "Start money", money], ["lapBonus", "Reward per lap", money], ["festivals", "Festivals count", n => String(n)]];
 function playTimeLabel(m){ return !m ? "No limit" : m < 60 ? m + "m" : m/60 + "h"; }
 let qs = null;   // the open panel's {get, set}

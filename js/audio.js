@@ -64,5 +64,7 @@ function sfx(kind){
   else if (kind === "festival"){ [67,72,76,79,84].forEach((m, i) => tone(mtof(m), t + i*.08, .3, "triangle", .08, d)); for (let i = 0; i < 6; i++) hiss(t + .2 + i*.09, .06, .12, d, 4000); }
   else if (kind === "fullset"){ [64,67,71,76].forEach((m, i) => tone(mtof(m), t + i*.06, .22, "square", .045, d, 2600)); tone(mtof(83), t + .3, .6, "triangle", .1, d); for (let i = 0; i < 5; i++) hiss(t + .3 + i*.07, .05, .1, d, 5000); }
   else if (kind === "double"){ tone(mtof(76), t, .12, "square", .05, d, 2400); tone(mtof(83), t + .1, .3, "triangle", .09, d); for (let i = 0; i < 4; i++) hiss(t + .85 + i*.05, .06, .08, d, 3000); }
+  else if (kind === "throw"){ hiss(t, .25, .05, d, 1800); tone(mtof(72), t, .2, "sine", .03, d); }
+  else if (kind === "splat"){ hiss(t, .18, .22, d, 900); tone(110, t, .12, "sine", .12, d); tone(70, t + .03, .16, "triangle", .08, d); }
   else if (kind === "win"){ [60,64,67,72,76,79,84].forEach((m, i) => tone(mtof(m), t + i*.09, .5, "triangle", .1, d)); }
 }

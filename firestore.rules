@@ -11,6 +11,13 @@ service cloud.firestore {
         && code.matches('^[A-Z0-9]{5}$')
         && request.resource.size() < 200000;
     }
+    // Tomato throws and other just-for-fun effects in a room (fx/CODE), kept apart from the game state
+    match /fx/{code} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+        && code.matches('^[A-Z0-9]{5}$')
+        && request.resource.size() < 2000;
+    }
     match /locks/{id} {
       allow read, write: if request.auth != null && id.matches('^games_[A-Z0-9]{5}$');
     }

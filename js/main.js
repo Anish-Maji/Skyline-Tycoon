@@ -120,6 +120,8 @@ function renderPlayers(){
     const size = innerWidth <= 640 ? 46 : 68, facing = corner === "tl" || corner === "bl" ? "right" : "left";
     av.appendChild(tycoonArt.liveCanvas(size, size, (c, t) => drawTycoon(c, size/2, size*1.9, size*1.85, p.look ?? idx, {facing, t:t + idx*1.3})));
     d.appendChild(av);
+    if (canThrowAt(idx)){ av.classList.add("throwable"); av.title = `Throw a tomato at ${p.name}`; av.setAttribute("role", "button"); av.tabIndex = 0;
+      av.onclick = () => throwTomato(idx); av.onkeydown = e => { if (e.key === "Enter" || e.key === " "){ e.preventDefault(); throwTomato(idx); } }; }
     const info = document.createElement("div"); info.className = "cp-info";
     info.innerHTML = `<div class="cp-name"></div><div class="cp-cash"></div><div class="cp-sub">${tag ? tag + " · " : ""}${props} ${props === 1 ? "property" : "properties"}${p.passes ? " · escape card" : ""}${p.shield ? " · shield" : ""}${p.taxFree ? " · tax free" : ""}${p.flight ? " · flight ready" : ""}${!p.laps && s.status === "playing" ? " · first lap" : ""}</div>`;
     info.querySelector(".cp-name").textContent = p.name; info.querySelector(".cp-cash").textContent = p.bankrupt ? "Out" : moneyFull(shownCash(idx));
@@ -139,6 +141,55 @@ let shownKey = "";
 setInterval(() => { const s = app.s; if (!s || !s.players) return; const v = s.players.map((p, i) => p.bankrupt ? "Out" : moneyFull(shownCash(i)));
   const key = v.join("|"); if (key === shownKey) return; shownKey = key;
   document.querySelectorAll("#players .cp-cash").forEach((e, i) => { if (v[i] != null) e.textContent = v[i]; }); fitCash(); }, 100);
+/* ---------- Tomato throw ----------
+   Tap another player's picture in their corner panel: a tomato flies from your picture in an arc and splats on theirs.
+   Just for fun, no effect on the game. Online, throws go through a small side doc (fx/CODE) so everyone sees them
+   without touching the game state. TOMATO_COOLDOWN_MS stops spamming. */
+const TOMATO_FLY_MS = 700, SPLAT_MS = 2800, TOMATO_COOLDOWN_MS = 1500;
+let lastThrow = 0, fxSeen = 0, fxUnsub = null;
+/* who is throwing from this screen: online, me; offline, the player whose turn it is (or the first person if a bot is playing) */
+function throwerIdx(){ const s = app.s; if (!s || s.status !== "playing") return -1;
+  if (app.mode === "online") return app.readOnly ? -1 : s.players.findIndex(p => p.id === app.me && !p.bankrupt && !p.left);
+  if (app.mode === "offline"){ const cur = s.players[s.turn]; return !cur.bot ? s.turn : s.players.findIndex(p => !p.bot && !p.bankrupt); }
+  return -1; }
+function canThrowAt(idx){ const me = throwerIdx(), t = app.s.players[idx]; return me >= 0 && idx !== me && t && !t.bankrupt; }
+function throwTomato(toIdx){
+  const from = throwerIdx(); if (from < 0 || from === toIdx || Date.now() - lastThrow < TOMATO_COOLDOWN_MS) return; lastThrow = Date.now();
+  playTomato(from, toIdx);
+  if (app.mode === "online" && app.db && app.code){ fxSeen = lastThrow; app.db.doc("fx/" + app.code).set({at:lastThrow, from:app.s.players[from].id, to:app.s.players[toIdx].id}).catch(() => {}); }
+}
+function avatarBox(idx){ const el = document.querySelectorAll("#players .cp")[idx]; const a = el && el.querySelector(".cp-av"); return a ? a.getBoundingClientRect() : null; }
+const TOMATO_SVG = `<svg viewBox="0 0 40 40"><ellipse cx="20" cy="23" rx="16" ry="14.5" fill="#e0301e"/><ellipse cx="14" cy="18" rx="5" ry="3.4" fill="#ff7a5c" opacity=".8"/>
+  <path d="M20 9 l-7 2 5 1 -3 4 5 -2 3 4 1 -5 5 1 -4 -3" fill="#3f9b3a"/><rect x="19" y="5" width="2.4" height="6" rx="1" fill="#2e7a2b"/></svg>`;
+const SPLAT_SVG = `<svg viewBox="0 0 100 100"><g fill="#d9301e"><path d="M50 18 C62 14 66 28 76 26 C88 24 90 40 82 46 C92 54 86 70 74 68 C72 80 58 86 50 78 C40 88 26 80 28 70 C14 70 10 54 20 48 C10 38 20 24 32 30 C34 18 44 14 50 18Z"/>
+  <circle cx="88" cy="24" r="5"/><circle cx="12" cy="30" r="4"/><circle cx="90" cy="70" r="3.5"/><circle cx="16" cy="78" r="5"/><circle cx="64" cy="10" r="3"/></g>
+  <g fill="#b3200f"><circle cx="44" cy="44" r="5"/><circle cx="58" cy="54" r="3.5"/><circle cx="40" cy="60" r="2.5"/></g><ellipse cx="40" cy="36" rx="9" ry="5" fill="#ff7a5c" opacity=".55"/>
+  <g class="drips" fill="#d9301e"><rect x="34" y="70" width="6" height="22" rx="3"/><rect x="58" y="72" width="5" height="16" rx="2.5"/><rect x="72" y="62" width="4" height="12" rx="2"/></g></svg>`;
+function playTomato(fromIdx, toIdx){
+  const a = avatarBox(fromIdx), b = avatarBox(toIdx); if (!a || !b) return;
+  const layer = $("fxLayer"), t = document.createElement("div"); t.className = "tomato"; t.innerHTML = TOMATO_SVG; layer.appendChild(t);
+  const x0 = a.left + a.width/2, y0 = a.top + a.height/2, x1 = b.left + b.width/2, y1 = b.top + b.height/2, lift = Math.max(90, Math.abs(x1 - x0)*.22), up = Math.min(y0, y1) - lift, peak = up > 30 ? up : Math.max(y0, y1) + lift;   // arc up, or down when there is no room above
+  const frames = []; for (let k = 0; k <= 12; k++){ const u = k/12, x = x0 + (x1 - x0)*u, y = (1 - u)*(1 - u)*y0 + 2*(1 - u)*u*peak + u*u*y1;
+    frames.push({transform:`translate(${x}px, ${y}px) translate(-50%, -50%) rotate(${u*540}deg) scale(${.8 + .5*Math.sin(Math.PI*u)})`}); }
+  sfx("throw");
+  const anim = t.animate(frames, {duration:TOMATO_FLY_MS, easing:"linear"});
+  anim.onfinish = () => { t.remove(); splatOn(toIdx); };
+}
+function splatOn(idx){
+  const b = avatarBox(idx); if (!b) return; sfx("splat");
+  const s = document.createElement("div"); s.className = "splat"; s.innerHTML = SPLAT_SVG; const size = Math.max(b.width, b.height)*1.35;
+  Object.assign(s.style, {left:(b.left + b.width/2 - size/2) + "px", top:(b.top + b.height/2 - size/2) + "px", width:size + "px", height:size + "px"});
+  $("fxLayer").appendChild(s); setTimeout(() => s.classList.add("gone"), SPLAT_MS); setTimeout(() => s.remove(), SPLAT_MS + 500);
+}
+/* online: watch the room's fx doc and play throws from the other players */
+function watchFx(code){
+  if (fxUnsub){ fxUnsub(); fxUnsub = null; } if (!code || !app.db) return; fxSeen = Date.now();
+  try{ fxUnsub = app.db.doc("fx/" + code).onSnapshot(snap => {
+    if (!snap.exists) return; const f = snap.data(); if (!f || !(f.at > fxSeen) || Date.now() - f.at > 5000) return; fxSeen = f.at;
+    if (f.from === app.me) return; const s = app.s; if (!s) return;
+    const a = s.players.findIndex(p => p.id === f.from), b = s.players.findIndex(p => p.id === f.to); if (a >= 0 && b >= 0) playTomato(a, b);
+  }, () => {}); }catch(e){}
+}
 /* Full amounts can get long: shrink a corner panel's cash text until it fits */
 function fitCash(){ document.querySelectorAll(".cp-cash").forEach(e => { e.style.fontSize = ""; let f = parseFloat(getComputedStyle(e).fontSize); while (e.scrollWidth > e.clientWidth && f > 9){ f -= 1; e.style.fontSize = f + "px"; } }); }
 addEventListener("resize", fitCash);
@@ -722,7 +773,7 @@ function tickClock(){
 setInterval(tickClock, 1000);
 
 function genCode(){ const A = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"; let c = ""; for (let i = 0; i < 5; i++) c += A[Math.floor(Math.random()*A.length)]; return c; }
-function stopOnline(){ if (app.unsub){ app.unsub(); app.unsub = null; } clearTimeout(app.loadTimer); app.code = null; app.pickSeat = null; }
+function stopOnline(){ if (app.unsub){ app.unsub(); app.unsub = null; } if (fxUnsub){ fxUnsub(); fxUnsub = null; } clearTimeout(app.loadTimer); app.code = null; app.pickSeat = null; }
 async function hostRoom(name){
   const code = genCode();
   const s = newState([mkPlayer(app.me, name, 0, false, 0)], {status:"lobby", phase:"lobby", host:app.me, code, created:Date.now(), ver:2, rules:savedSettings()});
@@ -748,6 +799,7 @@ function subscribe(code){
   stopOnline(); app.mode = "online"; app.code = code; app.sel = -1; store("skyline.lastRoom", code);
   let first = true;
   app.loadTimer = setTimeout(() => toast("Still connecting to the room…"), 10000);
+  watchFx(code);
   app.unsub = app.db.doc("games/" + code).onSnapshot(snap => {
     if (!snap.metadata.fromCache) clearTimeout(app.loadTimer);
     if (!snap.exists){ if (!snap.metadata.fromCache){ toast("That room was closed."); store("skyline.lastRoom", null); leaveGame(); } return; }

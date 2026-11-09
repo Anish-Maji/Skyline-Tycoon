@@ -335,3 +335,19 @@ body{margin:0;background:var(--stage);color:var(--ink);font-family:var(--body);f
 
 /* Gift a city: one button per rival, edged in their color */
 .btn.gift-to{box-shadow:inset 0 0 0 3px var(--pc)}
+
+/* Tomato throw: tap another player's picture. Tomatoes and splats fly in their own layer over everything. */
+.cp-av.throwable{cursor:pointer;position:relative}
+.cp-av.throwable::after{content:"";position:absolute;inset:6px;border-radius:10px;opacity:0;transition:opacity .15s;
+  background:linear-gradient(#fff,#fff) top left/12px 3px,linear-gradient(#fff,#fff) top left/3px 12px,linear-gradient(#fff,#fff) top right/12px 3px,linear-gradient(#fff,#fff) top right/3px 12px,
+    linear-gradient(#fff,#fff) bottom left/12px 3px,linear-gradient(#fff,#fff) bottom left/3px 12px,linear-gradient(#fff,#fff) bottom right/12px 3px,linear-gradient(#fff,#fff) bottom right/3px 12px;
+  background-repeat:no-repeat;filter:drop-shadow(0 1px 1px rgba(0,0,0,.5))}
+.cp-av.throwable:hover::after,.cp-av.throwable:focus-visible::after{opacity:1}
+.fxlayer{position:fixed;inset:0;pointer-events:none;z-index:40;overflow:hidden}
+.tomato{position:absolute;left:0;top:0;width:34px;height:34px;filter:drop-shadow(0 3px 3px rgba(0,0,0,.3))}
+.tomato svg,.splat svg{width:100%;height:100%;display:block;overflow:visible}
+.splat{position:absolute;animation:splatIn .22s cubic-bezier(.2,1.6,.4,1) both;transition:opacity .45s}
+.splat .drips{transform-origin:50% 70%;animation:drip 2.4s .2s ease-in both}
+.splat.gone{opacity:0}
+@keyframes splatIn{from{transform:scale(.2);opacity:.4}to{transform:none;opacity:1}}
+@keyframes drip{from{transform:scaleY(.2)}to{transform:scaleY(1)}}

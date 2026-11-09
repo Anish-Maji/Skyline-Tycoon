@@ -34,19 +34,39 @@ function box3(X, Y, w, d, h, col, z){ z = z || 0;
   poly([P(X+w,Y+d,z), P(X+w,Y,z), P(X+w,Y,z+h), P(X+w,Y+d,z+h)], shade(col, -.32));
   poly([P(X,Y,z+h), P(X+w,Y,z+h), P(X+w,Y+d,z+h), P(X,Y+d,z+h)], shade(col, .14));
 }
-function house(cx, cy, s, wall, roof){
-  const w = s, d = s*.85, h = s*.55, X = cx - w/2, Y = cy - d/2, r = h + s*.42, ov = s*.08;
-  box3(X, Y, w, d, h, wall);
-  poly([P(X+w*.38, Y+d, 0), P(X+w*.62, Y+d, 0), P(X+w*.62, Y+d, h*.62), P(X+w*.38, Y+d, h*.62)], shade(roof, -.25));
-  poly([P(X+w, Y+d*.3, h*.35), P(X+w, Y+d*.7, h*.35), P(X+w, Y+d*.7, h*.72), P(X+w, Y+d*.3, h*.72)], "#bfe3f5");
-  poly([P(X-ov, Y-ov, h), P(X+w+ov, Y-ov, h), P(X+w+ov, Y+d/2, r), P(X-ov, Y+d/2, r)], shade(roof, -.2));
-  poly([P(X+w, Y, h), P(X+w, Y+d, h), P(X+w, Y+d/2, r)], shade(wall, -.3));
-  poly([P(X-ov, Y+d+ov, h), P(X+w+ov, Y+d+ov, h), P(X+w+ov, Y+d/2, r), P(X-ov, Y+d/2, r)], roof);
+/* ---------- Construction ----------
+   New buildings are put together piece by piece: each piece drops in from above and lands with a little bounce.
+   b is the build progress from 0 to 1 (leave it out for a finished building). piece(b, from, to) is how far one
+   piece is along, and drop() draws it lifted by how much it still has to fall. */
+const DROP_HEIGHT = 1.1;   // how high (board units) a piece starts above where it lands
+const piece = (b, from, to) => b == null ? 1 : Math.max(0, Math.min(1, (b - from)/(to - from)));
+function drop(u, fn){
+  if (u <= 0) return; if (u >= 1) return fn();
+  const fall = u < .75 ? 1 - Math.pow(u/.75, 2) : -Math.sin((u - .75)/.25*Math.PI)*.06;   // falls, then a small bounce
+  const keep = V.lift, a = V.ctx.globalAlpha; V.lift = (keep || 0) + fall*DROP_HEIGHT; V.ctx.globalAlpha = a*Math.min(1, u*5);
+  fn(); V.lift = keep; V.ctx.globalAlpha = a;
+}
+/* A house on a thin base plate in the owner's color. Built as: plate, then walls, then roof. */
+function house(cx, cy, s, wall, roof, b){
+  const w = s, d = s*.85, h = s*.55, X = cx - w/2, Y = cy - d/2, r = h + s*.42, ov = s*.08, pl = s*.12;
+  drop(piece(b, 0, .35), () => box3(X - pl, Y - pl, w + pl*2, d + pl*2, .035, roof));
+  drop(piece(b, .2, .65), () => {
+    box3(X, Y, w, d, h, wall);
+    poly([P(X+w*.38, Y+d, 0), P(X+w*.62, Y+d, 0), P(X+w*.62, Y+d, h*.62), P(X+w*.38, Y+d, h*.62)], shade(roof, -.25));
+    poly([P(X+w, Y+d*.3, h*.35), P(X+w, Y+d*.7, h*.35), P(X+w, Y+d*.7, h*.72), P(X+w, Y+d*.3, h*.72)], "#bfe3f5");
+  });
+  drop(piece(b, .5, 1), () => {
+    poly([P(X-ov, Y-ov, h), P(X+w+ov, Y-ov, h), P(X+w+ov, Y+d/2, r), P(X-ov, Y+d/2, r)], shade(roof, -.2));
+    poly([P(X+w, Y, h), P(X+w, Y+d, h), P(X+w, Y+d/2, r)], shade(wall, -.3));
+    poly([P(X-ov, Y+d+ov, h), P(X+w+ov, Y+d+ov, h), P(X+w+ov, Y+d/2, r), P(X-ov, Y+d/2, r)], roof);
+  });
 }
 /* The Hotel, the top level: a tall cream block with rows of lit windows, a roof slab and an entrance canopy
    in the owner's color, and a HOTEL sign on the roof. (cx, cy) is the middle of its footprint, s its width. */
-function hotel(cx, cy, s, col){
+function hotel(cx, cy, s, col, b){
   const w = s, X = cx - w/2, Y = cy - w/2, h = s*2.6, floors = 5, c = V.ctx;
+  drop(piece(b, 0, .3), () => box3(X - s*.1, Y - s*.1, w + s*.2, w + s*.2, .035, col));   // base plate
+  drop(piece(b, .15, .6), () => {
   box3(X, Y, w, w, h, "#f6efe2");
   for (let f = 0; f < floors; f++){ const z = h*(.12 + f*.16), wh = h*.08;
     for (let k = 0; k < 3; k++){ const a = .12 + k*.28, b = a + .2;
@@ -55,28 +75,35 @@ function hotel(cx, cy, s, col){
   /* entrance canopy over the front door */
   box3(X + w*.25, Y + w, w*.5, w*.18, s*.06, col, h*.2);
   poly([P(X + w*.38, Y + w, 0), P(X + w*.62, Y + w, 0), P(X + w*.62, Y + w, h*.19), P(X + w*.38, Y + w, h*.19)], shade(col, -.35));
-  /* roof slab and the sign */
-  box3(X - s*.04, Y - s*.04, w + s*.08, w + s*.08, s*.1, col, h);
+  });
+  /* roof slab, then the sign */
+  drop(piece(b, .5, .82), () => box3(X - s*.04, Y - s*.04, w + s*.08, w + s*.08, s*.1, col, h));
+  drop(piece(b, .7, 1), () => {
   const top = P(cx, cy, h + s*.1), sw = Math.max(18, V.k*s*1.25), sh = Math.max(7, V.k*s*.34), sy = top[1] - sh*1.05;
   c.fillStyle = "#5b4636"; c.fillRect(top[0] - sw*.3, sy + sh, Math.max(1, V.k*.02), sh*.6); c.fillRect(top[0] + sw*.3, sy + sh, Math.max(1, V.k*.02), sh*.6);
   c.fillStyle = shade(col, -.3); c.beginPath(); if (c.roundRect) c.roundRect(top[0] - sw/2, sy, sw, sh, sh*.25); else c.rect(top[0] - sw/2, sy, sw, sh); c.fill();
-  c.fillStyle = "#fff6d8"; c.font = `900 ${sh*.78}px Figtree, sans-serif`; c.textAlign = "center"; c.textBaseline = "middle"; c.fillText("HOTEL", top[0], sy + sh*.55);
+  c.fillStyle = "#fff6d8"; c.font = `900 ${sh*.78}px ${FONT.body}`; c.textAlign = "center"; c.textBaseline = "middle"; c.fillText("HOTEL", top[0], sy + sh*.55);
+  });
 }
 function flag(X, Y, col, hgt){ const c = V.ctx, a = P(X, Y, 0), b = P(X, Y, hgt || .6);
   c.strokeStyle = "#5b4636"; c.lineWidth = Math.max(1.5, V.k*.035); c.beginPath(); c.moveTo(a[0], a[1]); c.lineTo(b[0], b[1]); c.stroke();
   poly([b, [b[0] + V.k*.32, b[1] + V.k*.08], [b[0], b[1] + V.k*.2]], col); }
 function plot(X, Y, s){ rect3(X - s/2, Y - s/2, X + s/2, Y + s/2, .005, "#f6f2e7", "#d9d0bb", 1); }
-function building(level, X, Y, col, along){
+/* b: build progress 0 to 1 while it is being constructed (see popBuilding), or left out when finished.
+   With two buildings on a tile, the second starts a little after the first (k = .3 of the way in). */
+function building(level, X, Y, col, along, b){
   { const [sx, sy] = P(X, Y); if (drawAsset("buildings", level, sx, sy, V.k*ASSET_HEIGHTS.buildings[level])) return; }
-  const ax = along === "X" ? [1, 0] : [0, 1];
-  if (level <= 1){ plot(X, Y, .34); flag(X, Y, col); return; }
-  if (level === 2){ house(X, Y, .36, "#fffaf2", col); return; }
-  if (level === 3){ house(X - ax[0]*.2, Y - ax[1]*.2, .32, "#fffaf2", col); house(X + ax[0]*.2, Y + ax[1]*.2, .32, "#fffaf2", col); return; }
+  const ax = along === "X" ? [1, 0] : [0, 1], first = b == null ? null : Math.min(1, b/.7), second = b == null ? null : Math.max(0, (b - .3)/.7);
+  if (level <= 1){ plot(X, Y, .34); drop(piece(b, 0, 1), () => flag(X, Y, col)); return; }
+  if (level === 2){ house(X, Y, .36, "#fffaf2", col, b); return; }
+  if (level === 3){ house(X - ax[0]*.2, Y - ax[1]*.2, .32, "#fffaf2", col, first); house(X + ax[0]*.2, Y + ax[1]*.2, .32, "#fffaf2", col, second); return; }
   if (level === 4){
-    box3(X - .17 - ax[0]*.22, Y - .17 - ax[1]*.22, .34, .34, .62, "#f2efe8"); poly([P(X - .17 - ax[0]*.22 + .34, Y - ax[1]*.22 - .1, .3), P(X - .17 - ax[0]*.22 + .34, Y - ax[1]*.22 + .1, .3), P(X - .17 - ax[0]*.22 + .34, Y - ax[1]*.22 + .1, .5), P(X - .17 - ax[0]*.22 + .34, Y - ax[1]*.22 - .1, .5)], col);
-    house(X + ax[0]*.22, Y + ax[1]*.22, .3, "#fffaf2", col); return;
+    const tx = X - .17 - ax[0]*.22, ty = Y - .17 - ax[1]*.22;
+    drop(piece(first, 0, .35), () => box3(tx - .04, ty - .04, .42, .42, .035, col));
+    drop(piece(first, .2, 1), () => { box3(tx, ty, .34, .34, .62, "#f2efe8"); poly([P(tx + .34, Y - ax[1]*.22 - .1, .3), P(tx + .34, Y - ax[1]*.22 + .1, .3), P(tx + .34, Y - ax[1]*.22 + .1, .5), P(tx + .34, Y - ax[1]*.22 - .1, .5)], col); });
+    house(X + ax[0]*.22, Y + ax[1]*.22, .3, "#fffaf2", col, second); return;
   }
-  hotel(X, Y, .42, col);
+  hotel(X, Y, .42, col, b);
 }
 function pine(X, Y, s){ { const [sx, sy] = P(X, Y); if (drawAsset("props", "pine", sx, sy, V.k*ASSET_HEIGHTS.props.pine*s)) return; } const c = V.ctx; box3(X - .04*s, Y - .04*s, .08*s, .08*s, .18*s, "#7a5232");
   for (let k = 0; k < 3; k++){ const z = .14*s + k*.2*s, r = (.32 - k*.08)*s; const base = P(X, Y, z), top = P(X, Y, z + .38*s);
@@ -138,6 +165,10 @@ function avatarCanvas(p){
   drawTycoon(c, 21, 86, 84, p.look ?? 0, {facing:"right", t:0}); return cv;
 }
 
+/* Fonts for text drawn on the board (names, rent tags, DOUBLE, counters). They come from --display and --body in css/theme.css. */
+const FONT = {display:"Bungee, sans-serif", body:"Figtree, sans-serif"};
+function readThemeFonts(){ try{ const cs = getComputedStyle(document.documentElement), d = cs.getPropertyValue("--display").trim(), b = cs.getPropertyValue("--body").trim(); if (d) FONT.display = d; if (b) FONT.body = b; }catch(e){} }
+readThemeFonts(); addEventListener("load", readThemeFonts); if (document.fonts) document.fonts.ready.then(readThemeFonts);
 /* ================= BOARD RENDERER ================= */
 function tileRect(i){
   if (i === 0) return {X0:S-D, X1:S, Y0:S-D, Y1:S, side:"c"};
@@ -162,7 +193,7 @@ function ptext(X, Y, dir, text, size, weight, color, maxW, family){
   const c = V.ctx, F = 100, [sx, sy] = P(X, Y), k = V.k;
   const u = dir === "Y" ? [k, -k/2] : [k, k/2], v = dir === "Y" ? [k, k/2] : [-k, k/2];
   c.save(); c.translate(sx, sy); c.transform(u[0]/F, u[1]/F, v[0]/F, v[1]/F, 0, 0);
-  c.font = `${weight} ${size*F}px ${family || "Figtree, sans-serif"}`; c.textAlign = "center"; c.textBaseline = "middle"; c.fillStyle = color;
+  c.font = `${weight} ${size*F}px ${family || FONT.body}`; c.textAlign = "center"; c.textBaseline = "middle"; c.fillStyle = color;
   c.fillText(text, 0, 0, maxW ? maxW*F : undefined); c.restore();
 }
 /* Names run along the board edge so every side reads left to right: bottom sides stand toward the center, top sides toward the outside. */
@@ -256,7 +287,7 @@ const board = (() => {
       }
       if (t < 1.9){ const p = P(c[0], c[1], lift + 1.25 + t*.35), fs = Math.max(11, k*.32)*(t < .2 ? .6 + 2*t : 1);
         x.globalAlpha = t < .2 ? t/.2 : t > 1.3 ? Math.max(0, 1 - (t - 1.3)/.6) : 1;
-        x.font = `400 ${fs}px Bungee, sans-serif`; x.textAlign = "center"; x.textBaseline = "middle"; x.lineJoin = "round";
+        x.font = `400 ${fs}px ${FONT.display}`; x.textAlign = "center"; x.textBaseline = "middle"; x.lineJoin = "round";
         x.lineWidth = Math.max(2, fs*.25); x.strokeStyle = "#7a2f12"; x.strokeText("FESTIVAL!", p[0], p[1]); x.fillStyle = "#ffffff"; x.fillText("FESTIVAL!", p[0], p[1]); }
       x.globalAlpha = 1;
     });
@@ -324,7 +355,7 @@ const board = (() => {
       const nc = along(r, .8); ptext(nc[0], nc[1], e, "INCOME TAX", .12, 900, "#6a4a32", .9);
     } else if (t.type === "start"){
       for (let k = 0; k < 6; k++) for (let q = 0; q < 2; q++) if ((k + q) % 2 === 0) rect3(r.X0 + .15 + k*.22, r.Y0 + .15 + q*.18, r.X0 + .37 + k*.22, r.Y0 + .33 + q*.18, .003, "#ffffff");
-      ptext(r.X0 + .8, r.Y0 + 1.0, "X", "START", .3, 400, "#ffffff", 1.3, "Bungee, sans-serif");
+      ptext(r.X0 + .8, r.Y0 + 1.0, "X", "START", .3, 400, "#ffffff", 1.3, FONT.display);
       ptext(r.X0 + .95, r.Y0 + 1.32, "X", "+" + money(rules(state).lapBonus), .18, 900, "#1f5c2c", 1.2);
     } else if (t.type === "jail"){
       /* Lost Island: shallow water with ripples and a sandy island. Palms and the label are drawn in cornerProps. */
@@ -362,7 +393,7 @@ const board = (() => {
     /* Corner names are written straight across the screen, white with a colored outline, near the front of the corner */
     const cornerLabel = (i, X, Y, text, outline) => items.push({dep:X + Y + 1.2, f:onTile(i, () => {   // drawn over the props on the same corner
       const p = P(X, Y, .05), x = V.ctx, fs = Math.max(9, V.k*.25);
-      x.save(); x.font = `400 ${fs}px Bungee, sans-serif`; x.textAlign = "center"; x.textBaseline = "middle"; x.lineJoin = "round";
+      x.save(); x.font = `400 ${fs}px ${FONT.display}`; x.textAlign = "center"; x.textBaseline = "middle"; x.lineJoin = "round";
       x.lineWidth = Math.max(2, fs*.28); x.strokeStyle = outline; x.strokeText(text, p[0], p[1]); x.fillStyle = "#ffffff"; x.fillText(text, p[0], p[1]); x.restore(); })});
     cornerLabel(8, D/2, S - D/2, "LOST ISLAND", "#1f4f63");
     cornerLabel(16, D/2, D/2, "GRAND EXPO", "#4d2c7a");
@@ -411,7 +442,7 @@ const board = (() => {
     (state.festivals || []).forEach(i => { const p = festPoles(i); items.push({dep:Math.min(p[0][0] + p[0][1], p[1][0] + p[1][1]) - .05, f:onTile(i, () => drawFestival(i, now))}); });
     Object.keys(state.own).forEach(k => { const i = +k, st = state.own[i]; if (!st || TILES[i].type !== "city") return; const owner = byId(state, st.o); if (!owner) return; const r = tileRect(i), a = along(r, .3);
       items.push({dep:a[0] + a[1], f:onTile(i, () => { popBuilding(i, st.l, a[0], a[1], owner.color, edgeDir(r.side));
-        if (state.expo === i){ const p = P(a[0], a[1], st.l === 5 ? 1.55 : 1.0), x = V.ctx; x.fillStyle = "#f2b51c"; x.beginPath(); x.arc(p[0], p[1], V.k*.16, 0, Math.PI*2); x.fill(); x.fillStyle = "#1c2a33"; x.font = `900 ${Math.max(8, V.k*.15)}px Figtree, sans-serif`; x.textAlign = "center"; x.textBaseline = "middle"; x.fillText("2×", p[0], p[1] + .5); } })}); });
+        if (state.expo === i){ const p = P(a[0], a[1], st.l === 5 ? 1.55 : 1.0), x = V.ctx; x.fillStyle = "#f2b51c"; x.beginPath(); x.arc(p[0], p[1], V.k*.16, 0, Math.PI*2); x.fill(); x.fillStyle = "#1c2a33"; x.font = `900 ${Math.max(8, V.k*.15)}px ${FONT.body}`; x.textAlign = "center"; x.textBaseline = "middle"; x.fillText("2×", p[0], p[1] + .5); } })}); });
     Object.keys(state.own).forEach(k => { const i = +k, st = state.own[i]; if (!st || TILES[i].type !== "beach") return; const owner = byId(state, st.o); const r = tileRect(i), a = along(r, .42), e = edgeDir(r.side);
       const pp = e === "X" ? [a[0] - .22, a[1]] : [a[0], a[1] - .22]; items.push({dep:pp[0] + pp[1], f:onTile(i, () => popResort(i, pp[0], pp[1], owner.color))}); });
     const cur = state.players[state.turn];
@@ -441,7 +472,7 @@ const board = (() => {
   /* A cartoon thought bubble above the current player while they decide: "Thinking about buying..." with bobbing dots */
   function thinkBubble(x, y, text, now){
     const c = V.ctx, f = Math.max(11, Math.min(17, V.k*.2)), dots = ".".repeat(1 + Math.floor(now/400) % 3);
-    c.save(); c.font = `700 ${f}px Figtree, sans-serif`;
+    c.save(); c.font = `700 ${f}px ${FONT.body}`;
     const lines = text.length > 18 ? splitTwo(text) : [text], w = Math.max(...lines.map(l => c.measureText(l + "...").width)) + f*2.2, h = lines.length*f*1.25 + f*1.4;
     const cx = Math.max(w/2 + 6, Math.min(W - w/2 - 6, x + w*.18)), cy = Math.max(h/2 + 6, y - f*1.4 - h/2 + Math.sin(now/600)*2);
     c.shadowColor = "rgba(0,0,0,.25)"; c.shadowBlur = 10; c.shadowOffsetY = 3; c.fillStyle = "#ffffff";
@@ -578,7 +609,7 @@ const board = (() => {
   function drawDouble(now){
     const F = doubleFx; if (!F || now < F.at) return; const el = now - F.at; if (el > DOUBLE_FX_MS){ doubleFx = null; return; }
     const c = V.ctx, mid = (DICE_REST[0][0] + DICE_REST[1][0])/2, [dx, dy] = P(mid, mid, .5), fs = Math.max(22, V.k*.62);
-    c.font = `400 ${fs}px Bungee, sans-serif`; const half = c.measureText("DOUBLE").width/2 + 10;
+    c.font = `400 ${fs}px ${FONT.display}`; const half = c.measureText("DOUBLE").width/2 + 10;
     const x = Math.max(half, dx - fs*2.7), y = dy;   // left of the dice, but never off the left edge on a narrow screen
     const IN = 260, PUFF = 950;   // zoom-in time, and when the cloud starts
     const zin = Math.min(1, el/IN), sc = 2.4 - 1.4*(1 - Math.pow(1 - zin, 3));
@@ -589,7 +620,7 @@ const board = (() => {
         c.beginPath(); c.arc(x + ox*fs*(1 + u*.35), y + oy*fs*(1 + u*.6), r*fs*(.55 + u*.65), 0, Math.PI*2); c.fill(); });
       c.restore(); }
     c.save(); c.globalAlpha = alpha; c.translate(x, y); c.scale(sc, sc);
-    c.font = `400 ${fs}px Bungee, sans-serif`; c.textAlign = "center"; c.textBaseline = "middle"; c.lineJoin = "round";
+    c.font = `400 ${fs}px ${FONT.display}`; c.textAlign = "center"; c.textBaseline = "middle"; c.lineJoin = "round";
     c.lineWidth = Math.max(4, fs*.26); c.strokeStyle = "#ffffff"; c.strokeText("DOUBLE", 0, 0);
     c.fillStyle = "#e4245a"; c.fillText("DOUBLE", 0, 0); c.restore();
   }
@@ -605,7 +636,7 @@ const board = (() => {
     c.shadowColor = "rgba(0,0,0,.3)"; c.shadowBlur = 8; c.shadowOffsetY = 3; c.fillStyle = "#ffffff";
     c.beginPath(); c.roundRect(-w/2, -h/2, w, h, f*.3); c.fill(); c.shadowColor = "transparent";
     c.lineWidth = Math.max(2, f*.1); c.strokeStyle = "#1c2a33"; c.stroke();
-    c.fillStyle = "#1c2a33"; c.font = `400 ${f}px Bungee, sans-serif`; c.textAlign = "center"; c.textBaseline = "middle"; c.fillText(String(C.sum), 0, f*.06);
+    c.fillStyle = "#1c2a33"; c.font = `400 ${f}px ${FONT.display}`; c.textAlign = "center"; c.textBaseline = "middle"; c.fillText(String(C.sum), 0, f*.06);
     c.restore();
     if (C.tile == null) return;
     /* outline the destination tile and float a badge over it */
@@ -615,7 +646,7 @@ const board = (() => {
     V.lift = keep;
     c.save(); c.fillStyle = "#ffffff"; c.strokeStyle = "#c9423a"; c.lineWidth = Math.max(2, br*.16);
     c.beginPath(); c.arc(bx, by, br*sc, 0, Math.PI*2); c.fill(); c.stroke();
-    c.fillStyle = "#1c2a33"; c.font = `900 ${br*1.05*sc}px Figtree, sans-serif`; c.textAlign = "center"; c.textBaseline = "middle"; c.fillText(String(C.sum), bx, by + 1);
+    c.fillStyle = "#1c2a33"; c.font = `900 ${br*1.05*sc}px ${FONT.body}`; c.textAlign = "center"; c.textBaseline = "middle"; c.fillText(String(C.sum), bx, by + 1);
     c.restore();
   }
   /* The amount paid: big white digits over the middle of the board that count up while the cash slides in,
@@ -628,12 +659,12 @@ const board = (() => {
     const u = Math.min(1, el/(M.dur*.6)), shown = Math.round(M.amt*(1 - Math.pow(1 - u, 3)));
     const c = V.ctx, [x, y] = P(S/2, S/2, 2.1), fs = Math.max(20, Math.min(40, V.k*.5));
     c.save(); c.globalAlpha = el > end ? 1 - (el - end)/400 : Math.min(1, el/150);
-    c.font = `400 ${fs}px Bungee, sans-serif`; c.textAlign = "center"; c.textBaseline = "middle";
+    c.font = `400 ${fs}px ${FONT.display}`; c.textAlign = "center"; c.textBaseline = "middle";
     c.lineWidth = Math.max(4, fs*.2); c.lineJoin = "round"; c.strokeStyle = "rgba(20,32,40,.55)"; c.strokeText(moneyFull(shown), x, y);
     c.fillStyle = "#ffffff"; c.fillText(moneyFull(shown), x, y); c.restore();
   }
   /* New buildings pop up on their tile (a quick grow with a little overshoot) a moment after they are bought */
-  const BUILD_POP_DELAY = 1500, BUILD_POP_MS = 450;
+  const BUILD_POP_DELAY = 1500, BUILD_POP_MS = 1300, RESORT_POP_MS = 450;   // construction time for a new building; the beach resort just pops
   let prevLevels = {}; const buildPop = {};
   const levelsOf = s => Object.fromEntries(Object.entries(s.own).map(([i, st]) => [i, st ? st.l : 0]));
   function popNewBuildings(s){
@@ -645,8 +676,8 @@ const board = (() => {
   function popResort(i, X, Y, color){
     const P0 = buildPop[i], now = performance.now();
     if (P0 && now < P0.t) return;
-    if (!P0 || now - P0.t >= BUILD_POP_MS){ if (P0) delete buildPop[i]; return resort(X, Y, .8, color); }
-    const u = (now - P0.t)/BUILD_POP_MS, s = 1 + 2.7*Math.pow(u - 1, 3) + 1.7*Math.pow(u - 1, 2), [bx, by] = P(X, Y, 0), c = V.ctx;
+    if (!P0 || now - P0.t >= RESORT_POP_MS){ if (P0) delete buildPop[i]; return resort(X, Y, .8, color); }
+    const u = (now - P0.t)/RESORT_POP_MS, s = 1 + 2.7*Math.pow(u - 1, 3) + 1.7*Math.pow(u - 1, 2), [bx, by] = P(X, Y, 0), c = V.ctx;
     c.save(); c.translate(bx, by); c.scale(s, s); c.translate(-bx, -by); resort(X, Y, .8, color); c.restore();
   }
   function popBuilding(i, l, X, Y, color, e){
@@ -654,8 +685,8 @@ const board = (() => {
     if (!P0) return building(l, X, Y, color, e);
     if (now < P0.t){ if (P0.from) building(P0.from, X, Y, color, e); return; }
     const u = (now - P0.t)/BUILD_POP_MS; if (u >= 1){ delete buildPop[i]; return building(l, X, Y, color, e); }
-    const s = 1 + 2.7*Math.pow(u - 1, 3) + 1.7*Math.pow(u - 1, 2), [bx, by] = P(X, Y, 0), c = V.ctx;
-    c.save(); c.translate(bx, by); c.scale(s, s); c.translate(-bx, -by); building(l, X, Y, color, e); c.restore();
+    if (!P0.sound){ P0.sound = true; sfx("build"); }
+    building(l, X, Y, color, e, u);   // constructed piece by piece
   }
   function hit(mx, my){
     const a = (mx - V.ox)/V.k, b = (my - V.oy + TILE_H*V.k)*2/V.k, X = (a + b)/2, Y = (b - a)/2;

@@ -1,0 +1,23 @@
+/* ================= THEME =================
+   The look you can tune by hand: fonts and corner roundness.
+   Change a value, save, refresh the page. Everything in styles.css and the text drawn on the board follows.
+
+   FONTS
+   1. Pick fonts on https://fonts.google.com and copy their "family=" part into the @import line below.
+   2. Put the font names in --display (big titles, buttons, board labels) and --body (everything else).
+      Keep the fallbacks after the comma, so the game still reads well while the font loads. */
+@import url("https://fonts.googleapis.com/css2?family=Bungee&family=Figtree:wght@400;500;600;700;800;900&display=swap");
+
+:root{
+  --display: "Bungee", "Arial Black", Impact, system-ui, sans-serif;
+  --body:    "Figtree", "Segoe UI", system-ui, -apple-system, sans-serif;
+
+  /* CORNERS: from the smallest to the largest. 0px makes square corners. */
+  --radius-xs: 5px;     /* tiny bits: tick boxes on price tags and level cards */
+  --radius-sm: 8px;     /* small labels: the turn line, little tags, small dice on phones */
+  --radius-md: 10px;    /* buttons, dice, text boxes, list rows, sell tags */
+  --radius-lg: 12px;    /* pictures inside cards, room code, character tiles, level cards */
+  --radius-xl: 16px;    /* home screen mode boxes, seat cards in the character picker */
+  --radius-2xl: 18px;   /* big cards and panels: corner player panels, Chance card, buy popup, sell card, menus */
+  --radius-pill: 999px; /* fully round ends: chips, pill buttons, the Roll button, toasts */
+}

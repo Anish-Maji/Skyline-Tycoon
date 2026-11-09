@@ -6,8 +6,9 @@ const rnd6 = () => 1 + Math.floor(Math.random()*6);
 function rules(s){ return Object.assign({}, DEFAULT_SETTINGS, s && s.rules); }
 function money(n){ n = Math.round(n); const neg = n < 0; n = Math.abs(n);
   const s = n >= 1000 ? (n/1000).toFixed(n % 1000 === 0 ? 0 : n % 100 === 0 ? 1 : 2) + "M" : n + "K"; return (neg ? "-" : "") + "₹" + s; }
-/* A player's money written out in full, with Indian digit grouping: 1500 becomes ₹15,00,000. Prices keep the short money() form. */
-function moneyFull(n){ n = Math.round(n*1000); return (n < 0 ? "-" : "") + "₹" + Math.abs(n).toLocaleString("en-IN"); }
+/* A player's money written out in full, in groups of three with spaces: 1500 becomes ₹1 500 000. Prices keep the short money() form.
+   The gaps are non-breaking spaces, so the amount never wraps onto two lines. */
+function moneyFull(n){ n = Math.round(n*1000); return (n < 0 ? "-" : "") + "₹" + String(Math.abs(n)).replace(/\B(?=(\d{3})+(?!\d))/g, "\u00a0"); }
 /* ---------- Per-game board layout ----------
    s.layout maps tile index to {name, code, price, g} for cities and {name, code, region} for beaches. applyLayout writes
    it into TILES, so the rest of the code keeps reading TILES[i]. Games saved without a valid layout use the board in config.js. */

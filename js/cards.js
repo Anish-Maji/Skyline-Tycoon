@@ -9,7 +9,7 @@ function cRound(c, x, y, w, h, r){ c.beginPath(); c.moveTo(x + r, y); c.arcTo(x 
 function cFill(c, color, stroke, lw){ c.fillStyle = color; c.fill(); if (stroke){ c.strokeStyle = stroke; c.lineWidth = lw || 3; c.lineJoin = "round"; c.stroke(); } }
 function cCircle(c, x, y, r, color, stroke, lw){ c.beginPath(); c.arc(x, y, r, 0, Math.PI*2); cFill(c, color, stroke, lw); }
 function cPoly(c, pts, color, stroke, lw){ c.beginPath(); pts.forEach(([x, y], k) => k ? c.lineTo(x, y) : c.moveTo(x, y)); c.closePath(); cFill(c, color, stroke, lw); }
-function cText(c, txt, x, y, size, color, rot){ c.save(); c.translate(x, y); if (rot) c.rotate(rot); c.font = `900 ${size}px Figtree, sans-serif`; c.textAlign = "center"; c.textBaseline = "middle"; c.fillStyle = color; c.fillText(txt, 0, 0); c.restore(); }
+function cText(c, txt, x, y, size, color, rot){ c.save(); c.translate(x, y); if (rot) c.rotate(rot); c.font = `900 ${size}px ${FONT.body}`; c.textAlign = "center"; c.textBaseline = "middle"; c.fillStyle = color; c.fillText(txt, 0, 0); c.restore(); }
 function cStar(c, x, y, r, color){ const pts = []; for (let k = 0; k < 10; k++){ const a = -Math.PI/2 + k*Math.PI/5, rr = k % 2 ? r*.45 : r; pts.push([x + Math.cos(a)*rr, y + Math.sin(a)*rr]); } cPoly(c, pts, color); }
 function cStamp(c, txt, x, y, color, rot){ c.save(); c.translate(x, y); c.rotate(rot); cRound(c, -46, -16, 92, 32, 6); c.strokeStyle = color; c.lineWidth = 4; c.stroke(); cText(c, txt, 0, 1, 19, color); c.restore(); }
 const INK = "#3a2a1c";

@@ -45,7 +45,7 @@ let cardT = null;
 const CARD_SHOW_MS = 4200, CARD_AFTER_MS = 350;   // how long the card stays, and the pause after the character lands
 /* True while a Chance card is waiting to show or is on screen. The next move waits for it. */
 let cardOpen = false;
-const cardBusy = () => cardOpen || bannerOpen;
+const cardBusy = () => cardOpen || bannerOpen || landingBusy();   // landingBusy: a landing sound with wait:true is still playing (audio.js)
 /* ---------- Full set banner ----------
    When a player comes to own every city of a color, a wide band in that color sweeps across the board:
    FULL SET, who and which region, and that rent there is now doubled. It waits for the walk, the building pop,

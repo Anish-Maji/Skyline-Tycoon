@@ -61,12 +61,21 @@ function setMusic(on){
 }
 /* Sound files from LANDING_SOUNDS. Each file is loaded once and restarted if it plays again. */
 const clips = {};
+/* A sound with wait:true keeps landingBusy() true until it ends (at most LANDING_WAIT_MAX_MS), so the next move waits for it */
+const LANDING_WAIT_MAX_MS = 15000;
+let landingUntil = 0;
+const landingBusy = () => Date.now() < landingUntil;
+function landingDone(){ if (!landingUntil) return; landingUntil = 0; if (typeof render === "function") render(); }
 function playLanding(tile){
   const L = LANDING_SOUNDS[tile]; if (!L || !audio.sfx) return;
   try{
-    let a = clips[tile]; if (!a){ a = clips[tile] = new Audio(L.src); a.preload = "auto"; a.onerror = () => console.warn("Sound not found:", L.src); }
-    a.volume = L.volume ?? 1; a.currentTime = 0; const p = a.play(); if (p && p.catch) p.catch(() => {});
-  }catch(e){}
+    let a = clips[tile]; if (!a){ a = clips[tile] = new Audio(L.src); a.preload = "auto";
+      a.onerror = () => { console.warn("Sound not found:", L.src); if (L.wait) landingDone(); };
+      if (L.wait){ a.addEventListener("ended", landingDone); a.addEventListener("loadedmetadata", () => { if (landingBusy()) landingUntil = Date.now() + Math.min(LANDING_WAIT_MAX_MS, (a.duration - a.currentTime)*1000 + 150); }); } }
+    a.volume = L.volume ?? 1; a.currentTime = 0;
+    if (L.wait) landingUntil = Date.now() + Math.min(LANDING_WAIT_MAX_MS, ((a.duration || 6)*1000) + 150);
+    const p = a.play(); if (p && p.catch) p.catch(() => { if (L.wait) landingDone(); });   // could not play (no tap yet): don't hold the game
+  }catch(e){ landingDone(); }
 }
 function sfx(kind){
   if (!audio.sfx || !audio.ctx) return; const t = audio.ctx.currentTime, d = audio.fx;

@@ -144,6 +144,9 @@ const ASSETS = {
   props:      { pine: null, palm: null, money: null },
   cards:      {}   // Chance card pictures by card id, e.g. shield: "assets/cards/shield.png" (shown at 240 x 170)
 };
+/* Background music: a sound file that loops while the Music button is on. Volume is 0 to 1.
+   Set src to null to go back to the music generated in code (js/audio.js). */
+const MUSIC = {src:"assets/sounds/music.mp3", volume:.45};
 /* Sounds that play when a character lands on a tile, by tile index. Respects the Sound button.
    Volume is 0 to 1. Add more tiles the same way, e.g. 24: {src:"assets/sounds/jet.mp3", volume:.8}. */
 const LANDING_SOUNDS = {

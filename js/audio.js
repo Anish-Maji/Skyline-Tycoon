@@ -39,8 +39,22 @@ function scheduleMusic(){
     audio.step++; audio.next += eighth;
   }
 }
+/* The music file from MUSIC in config.js, looping. It plays through the same volume control as the code music,
+   so it fades in and out the same way. If the file can't load, the code music plays instead. */
+function musicTrack(){
+  if (!MUSIC || !MUSIC.src || audio.trackFailed) return null;
+  if (!audio.track){ const el = new Audio(MUSIC.src); el.loop = true; el.preload = "auto"; el.volume = MUSIC.volume ?? .45;
+    el.addEventListener("error", () => { audio.trackFailed = true; console.warn("Music file missing, using the music made in code:", MUSIC.src); if (audio.music){ audio.track = null; setMusic(true); } });
+    try{ audio.ctx.createMediaElementSource(el).connect(audio.bus); }catch(e){}
+    audio.track = el; }
+  return audio.track;
+}
 function setMusic(on){
   audio.music = on; if (on && !ensureAudio()){ audio.music = false; return; }
+  const track = musicTrack();
+  if (on && track){ clearInterval(audio.timer); track.play().catch(() => {});
+    audio.bus.gain.cancelScheduledValues(audio.ctx.currentTime); audio.bus.gain.setTargetAtTime(1, audio.ctx.currentTime, .4); return; }
+  if (!on && track){ audio.bus.gain.setTargetAtTime(.0001, audio.ctx.currentTime, .2); setTimeout(() => { if (!audio.music) track.pause(); }, 800); return; }
   if (on){ audio.next = audio.ctx.currentTime + .05; clearInterval(audio.timer); audio.timer = setInterval(scheduleMusic, 60);
     audio.bus.gain.cancelScheduledValues(audio.ctx.currentTime); audio.bus.gain.setTargetAtTime(1, audio.ctx.currentTime, .4); }
   else if (audio.ctx){ audio.bus.gain.setTargetAtTime(.0001, audio.ctx.currentTime, .2); setTimeout(() => { if (!audio.music) clearInterval(audio.timer); }, 800); }

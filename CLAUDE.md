@@ -25,7 +25,7 @@ Opening `index.html` directly works too, but image assets load more reliably fro
 
 | `js/config.js` | Game data you will tune most: tiles, city names, prices, color sets, Chance cards, player colors, starting cash, rent multipliers, asset slots. |
 | `js/engine.js` | Rules. Pure functions on a game state object. `act(state, action)` returns `{s}` or `{err}`. `botAction(state)` picks a bot move. |
-| `js/audio.js` | Web Audio music loop and sound effects, generated in code. Also plays the tile landing sounds from `LANDING_SOUNDS` in `config.js` (files in `assets/sounds/`). |
+| `js/audio.js` | Background music: the file in `MUSIC` (config.js, now `assets/sounds/music.mp3`) loops through the music bus (`musicTrack`); if it is missing, the loop generated in code plays. Sound effects are generated in code. Also plays the tile landing sounds from `LANDING_SOUNDS` in `config.js` (files in `assets/sounds/`). |
 | `js/render.js` | Isometric drawing kit, asset loader, board renderer, build-card art. |
 | `js/cards.js` | Chance card pictures drawn in code (`CARD_ART`, one per card id) and `chanceArt()`. |
 | `js/net.js` | Online backend: `connectBackend()` uses the claude.ai artifact runtime when present, otherwise Firebase from `FIREBASE_CONFIG` in `config.js` (anonymous sign-in, Firestore). |

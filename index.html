@@ -75,6 +75,13 @@
     <div class="qs-foot"><span class="muted">Only you can see and change these.</span><button class="btn ghost" id="qsReset">Reset to default</button><button class="btn" id="qsDone">Done</button></div>
   </div>
 </div>
+<!-- Vercel Web Analytics (page views). Only on the Vercel site: skipped when running locally or as the claude.ai artifact. -->
+<script>
+  window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };
+  if (!/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname) && !/claude/.test(location.hostname)){
+    const va = document.createElement("script"); va.defer = true; va.src = "/_vercel/insights/script.js"; document.head.appendChild(va);
+  }
+</script>
 <script src="js/config.js"></script>
 <script src="js/engine.js"></script>
 <script src="js/audio.js"></script>

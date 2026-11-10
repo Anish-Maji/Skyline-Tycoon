@@ -101,7 +101,7 @@ function render(){
 }
 /* What the current player is deciding, shown in a thought bubble over their head so everyone can follow along */
 const THINKING = {buy:"Thinking about buying", upgrade:"Thinking about building", takeover:"Thinking about a buyout",
-  expo:"Picking an Expo city", freebuild:"Picking a city to build", forcebuy:"Picking a city to buy", demolish:"Picking a building to knock down", gift:"Picking who gets a city", debt:"Working out how to pay"};
+  expo:"Picking an Expo city", freebuild:"Picking a city to build", forcebuy:"Picking a city to buy", demolish:"Picking a building to knock down", quake:"Picking a city to shake down", gift:"Picking who gets a city", debt:"Working out how to pay"};
 function thinkingText(s){
   if (s.status !== "playing") return null;
   if (s.phase === "fly") return "Picking where to fly";
@@ -255,6 +255,12 @@ function renderActions(){
       box.appendChild(sl);
       giftTargets(s, p).forEach(o => { const b = btn("Give to " + o.name, () => dispatch({t:"gift", tile:+sl.value, to:o.id})); b.classList.add("gift-to"); b.style.setProperty("--pc", o.color); box.appendChild(b); });
       startPickTimer(s, "gift");
+    } else if (k === "quake"){
+      const opts = quakeOptions(s, p); board.setSelectable(new Set(opts));
+      tell("Earthquake. Tap a glowing rival city to wipe it out. It goes back to the market.");
+      const sl = document.createElement("select"); sl.setAttribute("aria-label", "City to wipe out");
+      opts.forEach(j => { const st = s.own[j], o = document.createElement("option"); o.value = j; o.textContent = `${TILES[j].name} · ${byId(s, st.o).name} · ${LEVEL_NAMES[st.l]}`; sl.appendChild(o); });
+      box.appendChild(sl); box.appendChild(btn("Wipe out", () => dispatch({t:"quake", tile:+sl.value}))); startPickTimer(s, "quake");
     } else if (k === "demolish"){
       const opts = demolishOptions(s, p); board.setSelectable(new Set(opts));
       tell("Demolition. Tap a glowing rival city to knock its building down one level.");
@@ -416,7 +422,8 @@ function buildPopup(s, p){
   refresh();
 }
 /* The card shrinks and fades out (CSS .leaving), then hides. The move is sent right away. */
-function closePop(a){ app.popDismissed = app.popKey; leavePop(); dispatch(a); }
+/* A tap on a popup that is already sliding away is ignored, so a double tap can't answer the next decision by mistake */
+function closePop(a){ const m = $("bmodal"); if (m.hidden || m.classList.contains("leaving")) return; app.popDismissed = app.popKey; leavePop(); dispatch(a); }
 function leavePop(){ const m = $("bmodal"); if (m.hidden || m.classList.contains("leaving")) return; m.classList.add("leaving"); setTimeout(() => { m.hidden = true; m.classList.remove("leaving"); }, 260); }
 $("bclose").onclick = () => closePop({t:"skip"});
 $("bskip").onclick = () => closePop({t:"skip"});
@@ -429,6 +436,7 @@ board.onClick(i => {
     if (s.phase === "fly" && i !== 24 && i !== 8){ dispatch({t:"fly", tile:i}); return; }
     if (s.phase === "act" && s.pending && s.pending.k === "debt"){ if (s.own[i] && s.own[i].o === p.id && performance.now() >= debtUI.until) toggleSell(i); return; }
     if (s.phase === "act" && s.pending && s.pending.k === "gift" && giftOptions(s, p).includes(i)){ const sl = $("giftSel"); if (sl){ sl.value = i; sfx("hop"); } return; }
+    if (s.phase === "act" && s.pending && s.pending.k === "quake" && quakeOptions(s, p).includes(i)){ dispatch({t:"quake", tile:i}); return; }
     if (s.phase === "act" && s.pending && s.pending.k === "demolish" && demolishOptions(s, p).includes(i)){ dispatch({t:"demolish", tile:i}); return; }
     if (s.phase === "act" && s.pending && (s.pending.k === "freebuild" || s.pending.k === "forcebuy") && (s.pending.k === "freebuild" ? freeBuildOptions(s, p) : forceSaleOptions(s, p)).includes(i)){ dispatch({t:s.pending.k, tile:i}); return; }
     if (s.phase === "act" && s.pending && s.pending.k === "expo" && s.own[i] && s.own[i].o === p.id && TILES[i].type === "city"){ dispatch({t:"expo", tile:i}); return; }
@@ -516,7 +524,7 @@ function rulesHtml(R){
     `Landing on Lost Island strands you. Roll doubles, pay ${money(BAIL)} for a boat or use an escape card to leave. After three failed rolls you pay and go.`,
     !R.islandRent && "Players stuck on Lost Island can't collect rent.",
     R.festivals && `Every game starts with festivals in ${R.festivals === 1 ? "one random city" : R.festivals + " random cities"}. They last the whole game and double the rent there.`,
-    "Chance cards can be Boosts (shield, free build, tax exemption, escape card), Setbacks (earthquake, blackout, fines) or World events (epidemic, force sale, world tour, demolition).",
+    "Chance cards can be Boosts (shield, free build, tax exemption, escape card), Setbacks (blackout, fines, gift a city) or World events (earthquake, epidemic, force sale, world tour, demolition).",
     "Grand Expo doubles rent in a city you choose. The Airport lets you fly anywhere next turn.",
     (wins.length ? `Win instantly with ${wins.length > 1 ? wins.slice(0, -1).join(", ") + " or " + wins[wins.length - 1] : wins[0]}. Or be` : "Win by being") + " the last tycoon with money.",
     R.playTime && `The game lasts ${R.playTime < 60 ? R.playTime + " minutes" : R.playTime/60 + (R.playTime === 60 ? " hour" : " hours")}. When time runs out, the round finishes and the richest tycoon wins.`
@@ -847,7 +855,21 @@ function leaveGame(){
 $("menuBtn").onclick = () => { if (app.mode === "online" && app.s && app.s.status === "lobby"){ showLobby(); return; }
   if (app.mode){ $("overlay").dataset.view = "menu"; openSheet(`<h1 style="font-size:24px">Menu</h1><p class="lede">${app.mode === "online" ? (app.s && app.s.status === "playing" && app.s.players.some(p => p.id === app.me && !p.left && !p.bankrupt) ? "If you leave, a bot takes over your seat and the game carries on for everyone else." : "You can rejoin with code " + esc(app.code) + ".") : "Your offline game is saved on this device."}</p>${rulesHtml(app.s && app.s.rules)}<div class="btns"><button class="btn" id="resBtn">Keep playing</button><button class="btn ghost" id="quitBtn">Leave game</button></div>`); $("resBtn").onclick = closeSheet; $("quitBtn").onclick = quitOnline; }
   else showHome(); };
-$("musicBtn").onclick = () => { setMusic(!audio.music); $("musicBtn").setAttribute("aria-pressed", String(audio.music)); };
+$("musicBtn").onclick = () => { setMusic(!audio.music); $("musicBtn").setAttribute("aria-pressed", String(audio.music)); peekVolume(); };
+/* Music volume slider: shows when you hover the Music button (or for a few seconds after tapping it on a phone).
+   0 is mute, 100 is full. Moving it above 0 starts the music if it was off. The level is remembered on this device. */
+const volIn = $("musicVol"), volOut = $("musicVolOut");
+function showVolume(v){ volIn.value = v; volOut.textContent = v === 0 ? "Mute" : v; volIn.style.setProperty("--fill", v + "%"); }
+{ let saved = 70; try{ const x = parseInt(localStorage.getItem("skyline.musicVol"), 10); if (x >= 0 && x <= 100) saved = x; }catch(e){}
+  setMusicVolume(saved/100); showVolume(saved); }
+volIn.addEventListener("input", () => {
+  const v = +volIn.value; setMusicVolume(v/100); showVolume(v); try{ localStorage.setItem("skyline.musicVol", String(v)); }catch(e){}
+  if (v > 0 && !audio.music){ setMusic(true); $("musicBtn").setAttribute("aria-pressed", String(audio.music)); }
+});
+let volPeekT = null;
+function peekVolume(){ if (!matchMedia("(hover: none)").matches) return; const w = $("volWrap"); w.classList.add("open"); clearTimeout(volPeekT); volPeekT = setTimeout(() => w.classList.remove("open"), 3500); }
+volIn.addEventListener("pointerdown", () => clearTimeout(volPeekT));
+volIn.addEventListener("change", () => { if (matchMedia("(hover: none)").matches){ clearTimeout(volPeekT); volPeekT = setTimeout(() => $("volWrap").classList.remove("open"), 2000); } });
 $("sfxBtn").onclick = () => { audio.sfx = !audio.sfx; if (audio.sfx) ensureAudio(); $("sfxBtn").setAttribute("aria-pressed", String(audio.sfx)); };
 $("overlay").addEventListener("click", e => { if (e.target === $("overlay") && app.mode && app.s && app.s.status !== "lobby") closeSheet(); });
 

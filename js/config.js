@@ -99,7 +99,7 @@ const CARDS = [
   {id:"bonus",     kind:"good",  title:"Investor bonus",      text:"Collect ₹150K."},
   {id:"bday",      kind:"good",  title:"Company anniversary", text:"Every tycoon pays you ₹30K."},
   {id:"jail",      kind:"bad",   title:"Storm warning",       text:"You wash up on Lost Island."},
-  {id:"quake",     kind:"bad",   title:"Earthquake",          text:"A random city loses one building level. Hotels stand firm."},
+  {id:"quake",     kind:"world", title:"Earthquake",          text:"Pick a rival's city. It is wiped out and goes back to the market. Hotels stand firm."},
   {id:"blackout",  kind:"bad",   title:"Blackout",            text:"A random city collects no rent for 2 rounds."},
   {id:"fine",      kind:"bad",   title:"Fine",                text:"Pay ₹100K to the bank."},
   {id:"back",      kind:"bad",   title:"Wrong exit",          text:"Go back 3 tiles."},

@@ -225,6 +225,8 @@ const board = (() => {
     s.players.forEach(p => {
       const d = disp[p.id];
       if (!d || first){ disp[p.id] = {pos:p.pos, path:null}; return; }
+      /* Bankrupt players are no longer drawn, so their walk would never finish and the board would stay busy forever */
+      if (p.bankrupt){ d.pos = p.pos; d.path = null; return; }
       const lm = s.lastMove;
       if (lm && lm.seq !== lastSeq && lm.pid === p.id && lm.kind === "walk" && !reduce.matches){
         const steps = (lm.to - d.pos + N) % N;
@@ -295,7 +297,9 @@ const board = (() => {
   /* Busy while anything is still playing out: walking, dice, a cash stack in the air or a building popping up.
      Buttons, popups and bots wait for it. */
   /* noMoney: ignore cash stacks still waiting (the Chance card shows first, then the money) */
-  function busy(noMoney){ const now = performance.now(); return Object.values(disp).some(d => d.path) || now < diceUntil
+  /* someone still walking (only players still in the game count) */
+  const walking = () => !!state && state.players.some(p => !p.bankrupt && disp[p.id] && disp[p.id].path);
+  function busy(noMoney){ const now = performance.now(); return walking() || now < diceUntil
     || (!noMoney && flights.some(f => now < f.t0 + (f.dur || MONEY_FLY_MS))) || Object.values(buildPop).some(b => now < b.t + BUILD_POP_MS); }
   const OFFS = [[-.2,-.14],[.18,-.16],[-.14,.16],[.2,.12]];
   /* Height of a tile's top right now: tiles with someone on them rest a little lower, and dip when a character lands. */
@@ -416,8 +420,8 @@ const board = (() => {
   /* Money piles, one per seat, next to that seat's corner panel: top-left, top-right, bottom-right, bottom-left */
   const PILES = [{X:-2.2, Y:S/2 - .6}, {X:S/2 - .7, Y:-2.1}, {X:S + .55, Y:S/2 - .5}, {X:S/2 - .8, Y:S + .5}];
   const SCENERY = [
-    /* only outside the board: the grass in the middle stays clear for the dice and buttons */
-    {k:"pine", X:-.7, Y:1.2, s:.9}, {k:"pine", X:-.55, Y:2.1, s:.7}, {k:"palm", X:S + .6, Y:S - 1.6, s:.9}, {k:"pine", X:1.4, Y:-.6, s:.8}, {k:"bush", X:S - 1.2, Y:S + .55, s:1.1}
+    /* Trees and bushes around the outside of the board. Empty for now: the board floats clean.
+       Add some back like {k:"pine", X:-.7, Y:1.2, s:.9} (k is "pine", "palm" or "bush"; s is the size). */
   ];
   function draw(now){
     if (!state){ requestAnimationFrame(draw); return; }
@@ -500,7 +504,7 @@ const board = (() => {
     for (let k = flights.length - 1; k >= 0; k--){ const f = flights[k]; if (f.started && now >= f.t0 + (f.dur || MONEY_FLY_MS)) flights.splice(k, 1); }
     const f = flights[0]; if (!f) return;
     if (!f.started){
-      if (Object.values(disp).some(d => d.path) || now < diceUntil || moneyHold()){ f.t0 = now + FLIGHT_GAP; return; }
+      if (walking() || now < diceUntil || moneyHold()){ f.t0 = now + FLIGHT_GAP; return; }
       if (now < f.t0) return;
       f.started = true; f.t0 = now; moneyCount = {amt:f.amt, t0:now, dur:f.dur || MONEY_FLY_MS, f};
     }

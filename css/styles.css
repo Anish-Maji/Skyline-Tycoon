@@ -349,3 +349,15 @@ body{margin:0;background:var(--stage);color:var(--ink);font-family:var(--body);f
 .splat.gone{opacity:0}
 @keyframes splatIn{from{transform:scale(.2);opacity:.4}to{transform:none;opacity:1}}
 @keyframes drip{from{transform:scaleY(.2)}to{transform:scaleY(1)}}
+
+/* Music volume: a slider that drops down from the Music button on hover (pops up above it when the toolbar sits at the bottom on phones) */
+.vol-wrap{position:relative;display:inline-flex}
+.vol-pop{position:absolute;left:50%;top:100%;transform:translate(-50%,4px);display:flex;align-items:center;gap:8px;padding:10px 12px;margin-top:4px;
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-md);box-shadow:0 8px 20px rgba(0,0,0,.18);
+  opacity:0;visibility:hidden;transition:opacity .15s,transform .15s,visibility .15s;white-space:nowrap;z-index:6}
+.vol-pop::before{content:"";position:absolute;left:0;right:0;top:-10px;height:10px}   /* keeps the hover alive between button and slider */
+.vol-wrap:hover .vol-pop,.vol-wrap:focus-within .vol-pop,.vol-wrap.open .vol-pop{opacity:1;visibility:visible;transform:translate(-50%,0)}
+.vol-pop input[type=range]{width:120px;accent-color:var(--accent);cursor:pointer}
+.vol-pop b{min-width:34px;text-align:right;font-size:12px;font-variant-numeric:tabular-nums;color:var(--muted)}
+@media (max-width:760px){.vol-pop{top:auto;bottom:100%;margin:0 0 4px;transform:translate(-50%,-4px)}.vol-pop::before{top:auto;bottom:-10px}
+  .vol-wrap:hover .vol-pop,.vol-wrap:focus-within .vol-pop,.vol-wrap.open .vol-pop{transform:translate(-50%,0)}}

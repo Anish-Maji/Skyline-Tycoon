@@ -1,6 +1,6 @@
 "use strict";
 /* ================= AUDIO: original procedural lounge loop + effects ================= */
-const audio = {ctx:null, music:false, sfx:true, timer:null, step:0, next:0};
+const audio = {ctx:null, music:false, sfx:true, timer:null, step:0, next:0, vol:.7};   // vol: music volume 0 (mute) to 1 (full), set by the slider by the Music button
 function ensureAudio(){
   try{
     if (!audio.ctx){ const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return false;
@@ -49,14 +49,19 @@ function musicTrack(){
     audio.track = el; }
   return audio.track;
 }
+/* Music volume from the slider, 0 to 1. 0 is silent. Takes effect right away while music plays. */
+function setMusicVolume(v){
+  audio.vol = Math.max(0, Math.min(1, v));
+  if (audio.music && audio.ctx){ audio.bus.gain.cancelScheduledValues(audio.ctx.currentTime); audio.bus.gain.setTargetAtTime(Math.max(.0001, audio.vol), audio.ctx.currentTime, .08); }
+}
 function setMusic(on){
   audio.music = on; if (on && !ensureAudio()){ audio.music = false; return; }
   const track = musicTrack();
   if (on && track){ clearInterval(audio.timer); track.play().catch(() => {});
-    audio.bus.gain.cancelScheduledValues(audio.ctx.currentTime); audio.bus.gain.setTargetAtTime(1, audio.ctx.currentTime, .4); return; }
+    audio.bus.gain.cancelScheduledValues(audio.ctx.currentTime); audio.bus.gain.setTargetAtTime(Math.max(.0001, audio.vol), audio.ctx.currentTime, .4); return; }
   if (!on && track){ audio.bus.gain.setTargetAtTime(.0001, audio.ctx.currentTime, .2); setTimeout(() => { if (!audio.music) track.pause(); }, 800); return; }
   if (on){ audio.next = audio.ctx.currentTime + .05; clearInterval(audio.timer); audio.timer = setInterval(scheduleMusic, 60);
-    audio.bus.gain.cancelScheduledValues(audio.ctx.currentTime); audio.bus.gain.setTargetAtTime(1, audio.ctx.currentTime, .4); }
+    audio.bus.gain.cancelScheduledValues(audio.ctx.currentTime); audio.bus.gain.setTargetAtTime(Math.max(.0001, audio.vol), audio.ctx.currentTime, .4); }
   else if (audio.ctx){ audio.bus.gain.setTargetAtTime(.0001, audio.ctx.currentTime, .2); setTimeout(() => { if (!audio.music) clearInterval(audio.timer); }, 800); }
 }
 /* Sound files from LANDING_SOUNDS. Each file is loaded once and restarted if it plays again. */

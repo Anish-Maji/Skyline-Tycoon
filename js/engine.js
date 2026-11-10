@@ -199,7 +199,9 @@ function demolishOptions(s, p){ return Object.keys(s.own).map(Number).filter(i =
 /* Cities p can give away with the Gift a city card (any of their cities, Hotels too), and the rivals who can receive one */
 function giftOptions(s, p){ return owned(s, p.id).filter(i => TILES[i].type === "city"); }
 function giftTargets(s, p){ return s.players.filter(o => o.id !== p.id && !o.bankrupt); }
-const CHANCE_PICKS = {freebuild:freeBuildOptions, forcebuy:forceSaleOptions, demolish:demolishOptions, gift:giftOptions};
+/* Rival cities the Earthquake card can wipe out: any rival city that isn't a Hotel (beaches are safe) */
+function quakeOptions(s, p){ return Object.keys(s.own).map(Number).filter(i => { const st = s.own[i], o = byId(s, st.o); return TILES[i].type === "city" && st.o !== p.id && o && !o.bankrupt && st.l < 5; }); }
+const CHANCE_PICKS = {freebuild:freeBuildOptions, forcebuy:forceSaleOptions, demolish:demolishOptions, gift:giftOptions, quake:quakeOptions};
 function chanceOptions(s, p, k){ return CHANCE_PICKS[k] ? CHANCE_PICKS[k](s, p) : []; }
 function drawCard(s, p){
   const c = CARDS[Math.floor(Math.random()*CARDS.length)], until = (s.round || 1) + EVENT_ROUNDS;
@@ -216,13 +218,9 @@ function drawCard(s, p){
     case "bonus": p.cash += 150; txn(s, null, p.id, 150); return finish(s);
     case "bday": s.players.forEach(o => { if (o !== p && !o.bankrupt) txn(s, o.id, p.id, pay(s, o, p, 30)); }); return finish(s);
     case "jail": if (!shielded(s, p, "trip to Lost Island")) sendJail(s, p); return finish(s);
-    case "quake": {
-      const hit = Object.keys(s.own).map(Number).filter(i => TILES[i].type === "city" && s.own[i].l >= 2 && s.own[i].l <= 4);
-      if (!hit.length){ say(s, "The ground shook, but nothing fell."); return finish(s); }
-      const i = pickOne(hit), st = s.own[i], owner = byId(s, st.o);
-      if (!shielded(s, owner, `earthquake in ${TILES[i].name}`)){ st.l--; say(s, `Earthquake in ${TILES[i].name}. ${owner.name}'s city drops to ${LEVEL_NAMES[st.l]}.`); }
-      return finish(s);
-    }
+    case "quake":   // the drawer picks a rival city to wipe out (see the "quake" action)
+      if (quakeOptions(s, p).length){ s.phase = "act"; s.pending = {k:"quake"}; return; }
+      say(s, "The ground shook, but no rival city could fall."); return finish(s);
     case "blackout": {
       const hit = Object.keys(s.own).map(Number).filter(i => TILES[i].type === "city" && !(s.blackouts && s.blackouts[i]));
       if (!hit.length){ say(s, "The power grid held. No city went dark."); return finish(s); }
@@ -375,6 +373,14 @@ function act(s0, a){
       const st = s.own[a.tile]; st.l++;
       say(s, `${p.name} built ${st.l === 5 ? "a Hotel" : "up to " + LEVEL_NAMES[st.l]} in ${TILES[a.tile].name} for free.`); finish(s); break;
     }
+    case "quake": {   // Earthquake: the city is destroyed and goes back to the market, buildings and all
+      if (s.phase !== "act" || !s.pending || s.pending.k !== "quake") return E("Nothing to shake.");
+      if (!quakeOptions(s, p).includes(a.tile)) return E("Pick a rival city that isn't a Hotel.");
+      const st = s.own[a.tile], owner = byId(s, st.o);
+      if (!shielded(s, owner, `earthquake in ${TILES[a.tile].name}`)){ delete s.own[a.tile]; if (s.expo === a.tile) s.expo = null;
+        say(s, `An earthquake wiped out ${owner.name}'s ${TILES[a.tile].name}. The land is up for sale again.`); }
+      finish(s); break;
+    }
     case "demolish": {
       if (s.phase !== "act" || !s.pending || s.pending.k !== "demolish") return E("Nothing to knock down.");
       if (!demolishOptions(s, p).includes(a.tile)) return E("Pick a rival city with a building.");
@@ -451,6 +457,7 @@ function botAction(s){
     if (k === "freebuild"){ const o = freeBuildOptions(s, p).sort((a, b) => TILES[b].price - TILES[a].price); return o.length ? {t:"freebuild", tile:o[0]} : {t:"skip"}; }
     if (k === "gift"){ const o = giftOptions(s, p).sort((a, b) => tileValue(a, s.own[a]) - tileValue(b, s.own[b])), r = giftTargets(s, p).sort((a, b) => a.cash - b.cash);
       return o.length && r.length ? {t:"gift", tile:o[0], to:r[0].id} : {t:"skip"}; }
+    if (k === "quake"){ const o = quakeOptions(s, p).sort((a, b) => tileValue(b, s.own[b]) - tileValue(a, s.own[a])); return o.length ? {t:"quake", tile:o[0]} : {t:"skip"}; }
     if (k === "demolish"){ const o = demolishOptions(s, p).sort((a, b) => rentOf(s, b) - rentOf(s, a)); return o.length ? {t:"demolish", tile:o[0]} : {t:"skip"}; }
     if (k === "forcebuy"){ const all = forceSaleOptions(s, p); if (!all.length) return {t:"skip"};
       const o = all.filter(j => tileValue(j, s.own[j]) <= p.cash - 300).sort((a, b) => rentOf(s, b) - rentOf(s, a));

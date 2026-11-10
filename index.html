@@ -15,7 +15,8 @@
   <div class="toolbar">
     <span class="chip" id="roomChip" hidden></span>
     <span class="chip clock" id="clockChip" hidden aria-live="off"></span>
-    <button class="iconbtn" id="musicBtn" aria-pressed="false">Music</button>
+    <span class="vol-wrap" id="volWrap"><button class="iconbtn" id="musicBtn" aria-pressed="false">Music</button>
+      <span class="vol-pop" role="group" aria-label="Music volume"><input type="range" id="musicVol" min="0" max="100" step="1" value="70" aria-label="Music volume"><b id="musicVolOut">70</b></span></span>
     <button class="iconbtn" id="sfxBtn" aria-pressed="true">Sound</button>
     <button class="iconbtn" id="menuBtn">Menu</button>
   </div>

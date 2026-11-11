@@ -27,7 +27,8 @@ function setState(s, opts){
     (s.txs || [s.tx]).filter(t => t && t.seq > app.lastTx).forEach(t => board.moneyFly(ix(t.from), ix(t.to), t.amt));
     app.lastTx = seq;
   }
-  if (s.status === "playing" && s.rollId === 0 && (!prev || prev.status !== "playing")) board.celebrate(s.festivals);   // a new game begins: festival flags pop up
+  if (s.status === "playing" && s.rollId === 0 && (!prev || prev.status !== "playing")) board.celebrate(s.festivals);
+  if (prev && !(opts && opts.reset) && s.expo != null && s.expo !== prev.expo) board.celebrate([s.expo], "GRAND EXPO!");   // the Expo's own flags go up   // a new game begins: festival flags pop up
   if (s.status === "playing" || s.status === "over"){
     if (prev && s.rollId !== app.lastRoll && app.lastRoll !== -1){ sfx("dice"); const d1 = $("d1"), d2 = $("d2"); d1.classList.remove("roll"); d2.classList.remove("roll"); void d1.offsetWidth; d1.classList.add("roll"); d2.classList.add("roll"); }
     const oc = Object.keys(s.own).length; if (prev && oc > app.lastOwnCount) sfx("buy");
@@ -88,7 +89,7 @@ function hideCard(){ clearTimeout(cardT); $("card").hidden = true; if (cardOpen)
 $("card").onclick = hideCard;
 
 /* " · auto move in 12s" when an online player is about to run out of time */
-function turnClock(s){ if (app.mode !== "online" || s.status !== "playing") return ""; const left = idleLeft(s); return left != null && left < 15000 ? ` · auto move in ${Math.max(0, Math.ceil(left/1000))}s` : ""; }
+function turnClock(s){ if (app.mode !== "online" || s.status !== "playing" || chancePickMs(s)) return ""; const left = idleLeft(s); return left != null && left < 15000 ? ` · auto move in ${Math.max(0, Math.ceil(left/1000))}s` : ""; }
 setInterval(() => { if (app.mode === "online" && app.s && app.s.status === "playing") { const s = app.s, cur = s.players[s.turn]; $("turnline").textContent = `${cur.name}'s turn${cur.jail ? " · on Lost Island" : ""}${turnClock(s)}`; } }, 1000);
 function render(){
   const s = app.s; if (!s) return;
@@ -196,7 +197,7 @@ addEventListener("resize", fitCash);
 /* ---------- Chance pick timer ----------
    Free build, Force sale and Demolition can't be skipped. The player has PICK_MS to choose a city;
    then a random one from the glowing cities is picked for them. The countdown shows under the buttons. */
-const PICK_MS = 25000, PICK_MS_BY = {gift:40000};   // Gift a city gets longer: pick a city and a player
+const PICK_MS = 50000, PICK_MS_BY = {};   // 50 s for every Chance pick; give one card its own time like PICK_MS_BY = {gift:40000}
 const pickTimer = {key:null, until:0};
 function startPickTimer(s, k){
   const key = s.rev + ":" + k; if (pickTimer.key !== key){ pickTimer.key = key; pickTimer.until = Date.now() + (PICK_MS_BY[k] || PICK_MS); }
@@ -241,8 +242,8 @@ function renderActions(){
   } else if (s.phase === "act" && s.pending){
     const k = s.pending.k;
     if (k === "expo"){
-      tell("Host the Grand Expo. Pick a city to double its rent.");
-      const mine = owned(s, p.id).filter(j => TILES[j].type === "city"); board.setSelectable(new Set(mine));
+      tell("Host the Grand Expo. Pick a city to double its rent. Festival cities can't host it.");
+      const mine = expoOptions(s, p); board.setSelectable(new Set(mine));
       const sl = document.createElement("select"); sl.id = "expoSel"; sl.setAttribute("aria-label", "Expo city");
       mine.forEach(j => { const o = document.createElement("option"); o.value = j; o.textContent = `${TILES[j].name} · ${money(rentOf(s, j))}`; sl.appendChild(o); });
       box.appendChild(sl); box.appendChild(btn("Host here", () => dispatch({t:"expo", tile:+sl.value})));
@@ -439,7 +440,7 @@ board.onClick(i => {
     if (s.phase === "act" && s.pending && s.pending.k === "quake" && quakeOptions(s, p).includes(i)){ dispatch({t:"quake", tile:i}); return; }
     if (s.phase === "act" && s.pending && s.pending.k === "demolish" && demolishOptions(s, p).includes(i)){ dispatch({t:"demolish", tile:i}); return; }
     if (s.phase === "act" && s.pending && (s.pending.k === "freebuild" || s.pending.k === "forcebuy") && (s.pending.k === "freebuild" ? freeBuildOptions(s, p) : forceSaleOptions(s, p)).includes(i)){ dispatch({t:s.pending.k, tile:i}); return; }
-    if (s.phase === "act" && s.pending && s.pending.k === "expo" && s.own[i] && s.own[i].o === p.id && TILES[i].type === "city"){ dispatch({t:"expo", tile:i}); return; }
+    if (s.phase === "act" && s.pending && s.pending.k === "expo" && expoOptions(s, p).includes(i)){ dispatch({t:"expo", tile:i}); return; }
   }
   /* Tapping a tile only does something when a move asks you to pick one (flight, Expo, Chance card, selling). */
 });
@@ -492,7 +493,9 @@ function autoMove(s){
   if (k && ["buy", "upgrade", "takeover"].includes(k)) return {t:"skip"};
   return botAction(s);
 }
-function idleLimit(s){ const cur = s.players[s.turn]; return cur.bot ? BOT_STALL_MS : s.autoFor === cur.id ? AUTO_FOLLOW_MS : IDLE_MS; }
+/* A Chance pick has its own longer countdown (PICK_MS), so the idle limit waits a little past it, and the turn line does not show a second countdown */
+const chancePickMs = s => s.phase === "act" && s.pending && CHANCE_PICKS[s.pending.k] ? (PICK_MS_BY[s.pending.k] || PICK_MS) : 0;
+function idleLimit(s){ const cur = s.players[s.turn]; return cur.bot ? BOT_STALL_MS : s.autoFor === cur.id ? AUTO_FOLLOW_MS : Math.max(IDLE_MS, chancePickMs(s) + 5000); }
 function idleLeft(s){ const cur = s.players[s.turn]; return cur.bot ? null : idleLimit(s) - (Date.now() - (s.moveAt || Date.now())); }
 setInterval(function watchdog(){
   const s = app.s; if (app.mode !== "online" || !s || s.status !== "playing" || app.writing || app.readOnly) return;

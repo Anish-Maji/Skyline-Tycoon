@@ -246,12 +246,14 @@ const board = (() => {
      Two poles with pennants and a banner across the outer part of the tile. When a game begins, they rise out of
      their tiles one after another, with a burst of confetti and a FESTIVAL! label (see celebrate below). */
   const festAnim = {};
+  const festLabel = {};   // a different label for a celebration, e.g. GRAND EXPO!
   const FEST_COLORS = ["#e5484d", "#f2b51c", "#25a86a", "#2f7fe0", "#d4468c", "#f0832a", "#7c5cd6"];
   const easeBack = f => { f = Math.min(1, Math.max(0, f)); const c = 1.7; return 1 + (c + 1)*Math.pow(f - 1, 3) + c*Math.pow(f - 1, 2); };
   const festRise = (i, now) => festAnim[i] == null ? 1 : easeBack((now - festAnim[i])/700);
   function festPoles(i){ const r = tileRect(i), c = along(r, .16), ax = edgeDir(r.side) === "X" ? [1, 0] : [0, 1];
     return [[c[0] - ax[0]*.42, c[1] - ax[1]*.42], [c[0] + ax[0]*.42, c[1] + ax[1]*.42]]; }
-  function drawFestival(i, now){
+  const EXPO_BANNER = "#7c5cd6", FEST_BANNER = "#f0832a";
+  function drawFestival(i, now, banner){
     const rise = festRise(i, now); if (rise <= .01) return;
     const [A, B] = festPoles(i), H = .95*rise, x = V.ctx, k = V.k;
     [A, B].forEach((p, n) => { const a = P(p[0], p[1], 0), b = P(p[0], p[1], H);
@@ -263,7 +265,7 @@ const board = (() => {
     /* banner: hangs between the poles with a little sag and sway */
     const sway = Math.sin(now/600 + i)*k*.015, t1 = P(A[0], A[1], H*.9), t2 = P(B[0], B[1], H*.9), b1 = P(A[0], A[1], H*.66), b2 = P(B[0], B[1], H*.66), sag = k*.07;
     const mt = [(t1[0] + t2[0])/2, (t1[1] + t2[1])/2 + sag + sway], mb = [(b1[0] + b2[0])/2, (b1[1] + b2[1])/2 + sag + sway];
-    x.fillStyle = "#f0832a"; x.beginPath(); x.moveTo(t1[0], t1[1]); x.quadraticCurveTo(mt[0], mt[1], t2[0], t2[1]); x.lineTo(b2[0], b2[1]); x.quadraticCurveTo(mb[0], mb[1], b1[0], b1[1]); x.closePath(); x.fill();
+    x.fillStyle = banner || FEST_BANNER; x.beginPath(); x.moveTo(t1[0], t1[1]); x.quadraticCurveTo(mt[0], mt[1], t2[0], t2[1]); x.lineTo(b2[0], b2[1]); x.quadraticCurveTo(mb[0], mb[1], b1[0], b1[1]); x.closePath(); x.fill();
     x.strokeStyle = "rgba(255,255,255,.85)"; x.lineWidth = Math.max(1, k*.025); x.beginPath();
     const qp = (p0, m, p1, f) => [(1 - f)*(1 - f)*p0[0] + 2*(1 - f)*f*m[0] + f*f*p1[0], (1 - f)*(1 - f)*p0[1] + 2*(1 - f)*f*m[1] + f*f*p1[1]];
     for (const yy of [.3, .7]){ const a0 = [t1[0] + (b1[0] - t1[0])*yy, t1[1] + (b1[1] - t1[1])*yy], a1 = [t2[0] + (b2[0] - t2[0])*yy, t2[1] + (b2[1] - t2[1])*yy], am = [mt[0] + (mb[0] - mt[0])*yy, mt[1] + (mb[1] - mt[1])*yy];
@@ -290,7 +292,7 @@ const board = (() => {
       if (t < 1.9){ const p = P(c[0], c[1], lift + 1.25 + t*.35), fs = Math.max(11, k*.32)*(t < .2 ? .6 + 2*t : 1);
         x.globalAlpha = t < .2 ? t/.2 : t > 1.3 ? Math.max(0, 1 - (t - 1.3)/.6) : 1;
         x.font = `400 ${fs}px ${FONT.display}`; x.textAlign = "center"; x.textBaseline = "middle"; x.lineJoin = "round";
-        x.lineWidth = Math.max(2, fs*.25); x.strokeStyle = "#7a2f12"; x.strokeText("FESTIVAL!", p[0], p[1]); x.fillStyle = "#ffffff"; x.fillText("FESTIVAL!", p[0], p[1]); }
+        x.lineWidth = Math.max(2, fs*.25); const label = festLabel[i] || "FESTIVAL!"; x.strokeStyle = festLabel[i] ? "#3a2470" : "#7a2f12"; x.strokeText(label, p[0], p[1]); x.fillStyle = "#ffffff"; x.fillText(label, p[0], p[1]); }
       x.globalAlpha = 1;
     });
   }
@@ -444,9 +446,11 @@ const board = (() => {
     SCENERY.forEach(o => items.push({dep:o.X + o.Y, f:() => o.k === "pine" ? pine(o.X, o.Y, o.s) : o.k === "palm" ? palm(o.X, o.Y, o.s) : bush(o.X, o.Y, o.s)}));
     cornerProps(items);
     (state.festivals || []).forEach(i => { const p = festPoles(i); items.push({dep:Math.min(p[0][0] + p[0][1], p[1][0] + p[1][1]) - .05, f:onTile(i, () => drawFestival(i, now))}); });
+    if (state.expo != null && state.own[state.expo] && !(state.festivals || []).includes(state.expo)){ const i = state.expo, p = festPoles(i);   // the Grand Expo city flies its own flags
+      items.push({dep:Math.min(p[0][0] + p[0][1], p[1][0] + p[1][1]) - .05, f:onTile(i, () => drawFestival(i, now, EXPO_BANNER))}); }
     Object.keys(state.own).forEach(k => { const i = +k, st = state.own[i]; if (!st || TILES[i].type !== "city") return; const owner = byId(state, st.o); if (!owner) return; const r = tileRect(i), a = along(r, .3);
       items.push({dep:a[0] + a[1], f:onTile(i, () => { popBuilding(i, st.l, a[0], a[1], owner.color, edgeDir(r.side));
-        if (state.expo === i){ const p = P(a[0], a[1], st.l === 5 ? 1.55 : 1.0), x = V.ctx; x.fillStyle = "#f2b51c"; x.beginPath(); x.arc(p[0], p[1], V.k*.16, 0, Math.PI*2); x.fill(); x.fillStyle = "#1c2a33"; x.font = `900 ${Math.max(8, V.k*.15)}px ${FONT.body}`; x.textAlign = "center"; x.textBaseline = "middle"; x.fillText("2×", p[0], p[1] + .5); } })}); });
+        /* the Expo city shows by its purple flags (no 2x badge) */ })}); });
     Object.keys(state.own).forEach(k => { const i = +k, st = state.own[i]; if (!st || TILES[i].type !== "beach") return; const owner = byId(state, st.o); const r = tileRect(i), a = along(r, .42), e = edgeDir(r.side);
       const pp = e === "X" ? [a[0] - .22, a[1]] : [a[0], a[1] - .22]; items.push({dep:pp[0] + pp[1], f:onTile(i, () => popResort(i, pp[0], pp[1], owner.color))}); });
     const cur = state.players[state.turn];
@@ -705,7 +709,7 @@ const board = (() => {
   return { start(){ resize(); requestAnimationFrame(draw); }, setState, busy, resize,
     setSelectable(set){ selectable = set; },
     /* Pops the festival flags up on these tiles, one after another */
-    celebrate(tiles){ const t0 = performance.now() + 450; (tiles || []).forEach((i, n) => { festAnim[i] = t0 + n*350; }); if ((tiles || []).length) setTimeout(() => sfx("festival"), 450); },
+    celebrate(tiles, label){ const t0 = performance.now() + 450; (tiles || []).forEach((i, n) => { festAnim[i] = t0 + n*350; if (label) festLabel[i] = label; else delete festLabel[i]; }); if ((tiles || []).length) setTimeout(() => sfx("festival"), 450); },
     /* Screen point (CSS px) just above tile i, for labels such as the sell tags */
     screenOf(i){ const r = tileRect(i), a = r.side === "c" ? [(r.X0 + r.X1)/2, (r.Y0 + r.Y1)/2] : along(r, .45); const keep = V.lift; V.lift = 0; const p = P(a[0], a[1], TILE_H + (i % 2 ? 1.3 : .5)); V.lift = keep; return p; },   /* neighbours alternate heights so labels do not overlap */
     setSel(i){ sel = i; },

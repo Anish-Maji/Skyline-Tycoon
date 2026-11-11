@@ -201,6 +201,8 @@ function giftOptions(s, p){ return owned(s, p.id).filter(i => TILES[i].type === 
 function giftTargets(s, p){ return s.players.filter(o => o.id !== p.id && !o.bankrupt); }
 /* Rival cities the Earthquake card can wipe out: any rival city that isn't a Hotel (beaches are safe) */
 function quakeOptions(s, p){ return Object.keys(s.own).map(Number).filter(i => { const st = s.own[i], o = byId(s, st.o); return TILES[i].type === "city" && st.o !== p.id && o && !o.bankrupt && st.l < 5; }); }
+/* The Grand Expo is a carnival of its own, so it can only go to a city of yours that doesn't already host a festival */
+function expoOptions(s, p){ return owned(s, p.id).filter(i => TILES[i].type === "city" && !(s.festivals || []).includes(i)); }
 const CHANCE_PICKS = {freebuild:freeBuildOptions, forcebuy:forceSaleOptions, demolish:demolishOptions, gift:giftOptions, quake:quakeOptions};
 function chanceOptions(s, p, k){ return CHANCE_PICKS[k] ? CHANCE_PICKS[k](s, p) : []; }
 function drawCard(s, p){
@@ -279,8 +281,8 @@ function resolve(s, p){
       if (!amt){ say(s, `${p.name} owns no property, so there is no tax to pay.`); return finish(s); }
       if (!charge(s, p, null, amt, "tax", `${p.name} paid ${money(amt)} in ${t.name}.`)) return; return finish(s); }
     case "expo":
-      if (owned(s, p.id).some(j => TILES[j].type === "city")){ s.phase = "act"; s.pending = {k:"expo"}; return; }
-      say(s, `${p.name} visited the Grand Expo with nothing to show.`); return finish(s);
+      if (expoOptions(s, p).length){ s.phase = "act"; s.pending = {k:"expo"}; return; }
+      say(s, owned(s, p.id).some(j => TILES[j].type === "city") ? `${p.name}'s cities already host festivals, so the Grand Expo moves on.` : `${p.name} visited the Grand Expo with nothing to show.`); return finish(s);
     case "jet": p.flight = true; say(s, `${p.name} checked in at the Airport. Next turn they can fly anywhere.`); return finish(s);
     /* Landing on Lost Island strands you: roll doubles, pay the boat or use an escape card to leave (third try: pay and go) */
     case "jail": p.jail = 1; p.flight = false; s.extra = false; say(s, `${p.name} washed up on Lost Island.`); return finish(s);
@@ -364,7 +366,7 @@ function act(s0, a){
     }
     case "expo": {
       if (s.phase !== "act" || !s.pending || s.pending.k !== "expo") return E("No expo to host.");
-      const st = s.own[a.tile]; if (!st || st.o !== p.id || TILES[a.tile].type !== "city") return E("Pick one of your own cities.");
+      if (!expoOptions(s, p).includes(a.tile)) return E((s.festivals || []).includes(a.tile) ? "That city already hosts a festival." : "Pick one of your own cities.");
       s.expo = a.tile; say(s, `${p.name} brought the Grand Expo to ${TILES[a.tile].name}. Rent there is doubled.`); finish(s); break;
     }
     case "freebuild": {
@@ -463,7 +465,7 @@ function botAction(s){
       const o = all.filter(j => tileValue(j, s.own[j]) <= p.cash - 300).sort((a, b) => rentOf(s, b) - rentOf(s, a));
       return {t:"forcebuy", tile:o.length ? o[0] : all.sort((a, b) => tileValue(a, s.own[a]) - tileValue(b, s.own[b]))[0]}; }
     if (k === "forcebuy"){ const o = forceSaleOptions(s, p).filter(j => tileValue(j, s.own[j]) <= p.cash - 300).sort((a, b) => rentOf(s, b) - rentOf(s, a)); return o.length ? {t:"forcebuy", tile:o[0]} : {t:"skip"}; }
-    if (k === "expo"){ const mine = owned(s, p.id).filter(j => TILES[j].type === "city").sort((a, b) => rentOf(s, b) - rentOf(s, a)); return {t:"expo", tile:mine[0]}; }
+    if (k === "expo"){ const mine = expoOptions(s, p).sort((a, b) => rentOf(s, b) - rentOf(s, a)); return mine.length ? {t:"expo", tile:mine[0]} : {t:"skip"}; }
   }
   return {t:"skip"};
 }

@@ -734,8 +734,9 @@ const QS_TOGGLES = [
 const QS_SLIDERS = [["startCash", "Start money", money], ["lapBonus", "Reward per lap", money], ["festivals", "Festivals count", n => String(n)]];
 function playTimeLabel(m){ return !m ? "No limit" : m < 60 ? m + "m" : m/60 + "h"; }
 let qs = null;   // the open panel's {get, set}
-function savedSettings(){ try{ return Object.assign({}, DEFAULT_SETTINGS, JSON.parse(load("skyline.settings2") || "{}")); }catch(e){ return Object.assign({}, DEFAULT_SETTINGS); } }
-function keepSettings(R){ store("skyline.settings2", JSON.stringify(R)); }
+/* islandRentV2: settings saved before the island-rent default changed to No forget their old Yes once */
+function savedSettings(){ try{ const x = JSON.parse(load("skyline.settings2") || "{}"); if (!x.islandRentV2) delete x.islandRent; delete x.islandRentV2; return Object.assign({}, DEFAULT_SETTINGS, x); }catch(e){ return Object.assign({}, DEFAULT_SETTINGS); } }
+function keepSettings(R){ store("skyline.settings2", JSON.stringify(Object.assign({}, R, {islandRentV2:true}))); }
 function qsSummary(R){ const el = $("qsSum"); if (!el) return; R = Object.assign({}, DEFAULT_SETTINGS, R);
   el.textContent = [playTimeLabel(R.playTime), "Start " + money(R.startCash), "Lap " + money(R.lapBonus), R.festivals + (R.festivals === 1 ? " festival" : " festivals")].join(" · "); }
 function closeQS(){ qs = null; $("qs").hidden = true; }

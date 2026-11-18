@@ -17,12 +17,12 @@ const FESTIVALS = {count:3, rentMult:2};
    lineMonopoly    win by owning every city on one side of the board. Each side is only two color sets, so it is off by default.
    tripleMonopoly  win by owning three full color sets
    beachMonopoly   win by owning all four beaches
-   islandRent      players stuck on Lost Island still collect rent
+   islandRent      players stuck on Lost Island still collect rent (default No: no rent while stuck)
    botBuild        bots build houses and Hotels (No: bots only buy land)
    directBuild     build several levels in one visit (No: one level each time you land)
    doublesAgain    roll again after any doubles (doubles also get you off Lost Island) */
 const DEFAULT_SETTINGS = {playTime:60, startCash:START_CASH, lapBonus:GO_BONUS, festivals:FESTIVALS.count,
-  lineMonopoly:false, tripleMonopoly:true, beachMonopoly:true, islandRent:true, botBuild:true, directBuild:true, doublesAgain:true};
+  lineMonopoly:false, tripleMonopoly:true, beachMonopoly:true, islandRent:false, botBuild:true, directBuild:true, doublesAgain:true};
 /* Slider ranges in the Quick settings panel, and the play time choices (0 = no limit) */
 const SETTING_RANGES = {startCash:{min:200, max:10000, step:100}, lapBonus:{min:0, max:2000, step:50}, festivals:{min:0, max:10, step:1}};
 const PLAY_TIMES = [20, 60, 120, 0];

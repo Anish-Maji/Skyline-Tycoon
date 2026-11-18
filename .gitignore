@@ -4,3 +4,4 @@ _tmpvid/
 node_modules/
 .DS_Store
 Thumbs.db
+recordings/

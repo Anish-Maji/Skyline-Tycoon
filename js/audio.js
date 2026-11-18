@@ -95,5 +95,6 @@ function sfx(kind){
   else if (kind === "throw"){ hiss(t, .25, .05, d, 1800); tone(mtof(72), t, .2, "sine", .03, d); }
   else if (kind === "splat"){ hiss(t, .18, .22, d, 900); tone(110, t, .12, "sine", .12, d); tone(70, t + .03, .16, "triangle", .08, d); }
   else if (kind === "build"){ [0, .2, .42, .62].forEach((dt, i) => { tone(140 + i*30, t + dt, .07, "triangle", .1, d); hiss(t + dt, .04, .06, d, 2200); }); tone(mtof(79), t + .95, .25, "triangle", .07, d); }
+  else if (kind === "unbuild"){ [0, .14, .3].forEach((dt, i) => { tone(320 - i*60, t + dt, .06, "triangle", .08, d); hiss(t + dt, .05, .07, d, 3200); }); hiss(t + .35, .4, .09, d, 1100); }   // pieces lifting off, then a puff of dust
   else if (kind === "win"){ [60,64,67,72,76,79,84].forEach((m, i) => tone(mtof(m), t + i*.09, .5, "triangle", .1, d)); }
 }

@@ -40,8 +40,14 @@ function box3(X, Y, w, d, h, col, z){ z = z || 0;
    piece is along, and drop() draws it lifted by how much it still has to fall. */
 const DROP_HEIGHT = 1.1;   // how high (board units) a piece starts above where it lands
 const piece = (b, from, to) => b == null ? 1 : Math.max(0, Math.min(1, (b - from)/(to - from)));
+/* Taking a building apart runs the same pieces in reverse. While V.breaking is set (see unbuild), a piece that is
+   leaving floats up BREAK_RISE, drifts a little to one side (BREAK_DRIFT, in turn per piece) and fades out. */
+const BREAK_RISE = 1.5, BREAK_DRIFT = [-.5, .45, -.3, .6, -.55, .35, -.4, .5];
 function drop(u, fn){
   if (u <= 0) return; if (u >= 1) return fn();
+  if (V.breaking){ const g = 1 - u, n = V.breaking.n++, c = V.ctx, keep = V.lift;
+    c.save(); c.globalAlpha *= Math.min(1, u*1.6); c.translate(BREAK_DRIFT[n % BREAK_DRIFT.length]*g*V.k*.6, 0);
+    V.lift = (keep || 0) + g*.25 + g*g*BREAK_RISE; fn(); V.lift = keep; c.restore(); return; }
   const fall = u < .75 ? 1 - Math.pow(u/.75, 2) : -Math.sin((u - .75)/.25*Math.PI)*.06;   // falls, then a small bounce
   const keep = V.lift, a = V.ctx.globalAlpha; V.lift = (keep || 0) + fall*DROP_HEIGHT; V.ctx.globalAlpha = a*Math.min(1, u*5);
   fn(); V.lift = keep; V.ctx.globalAlpha = a;
@@ -85,6 +91,60 @@ function hotel(cx, cy, s, col, b){
   c.fillStyle = "#fff6d8"; c.font = `900 ${sh*.78}px ${FONT.body}`; c.textAlign = "center"; c.textBaseline = "middle"; c.fillText("HOTEL", top[0], sy + sh*.55);
   });
 }
+/* ---------- Airport ----------
+   A round control tower: white stem, a wider glass cab with a white rim, a blue cap, an antenna with a little flag. */
+function cylinder(X, Y, r, z0, z1, side, top){
+  const c = V.ctx, k = V.k, rx = r*k*Math.SQRT2, ry = rx/2, b = P(X, Y, z0), t = P(X, Y, z1);
+  c.fillStyle = side; c.beginPath(); c.ellipse(b[0], b[1], rx, ry, 0, 0, Math.PI); c.lineTo(t[0] - rx, t[1]); c.ellipse(t[0], t[1], rx, ry, 0, Math.PI, 0, true); c.closePath(); c.fill();
+  c.fillStyle = "rgba(0,0,0,.12)"; c.beginPath(); c.ellipse(b[0], b[1], rx, ry, 0, 0, Math.PI*.5); c.lineTo(t[0], t[1] + ry); c.ellipse(t[0], t[1], rx, ry, 0, Math.PI*.5, 0, true); c.closePath(); c.fill();   // shade on the right
+  if (top){ c.fillStyle = top; c.beginPath(); c.ellipse(t[0], t[1], rx, ry, 0, 0, Math.PI*2); c.fill(); }
+}
+function controlTower(X, Y, now){
+  const c = V.ctx, k = V.k;
+  cylinder(X, Y, .22, 0, .08, "#9aa6b0", "#b9c3cb");          // base
+  cylinder(X, Y, .1, .08, .95, "#f4f6f8", "#e2e7eb");         // stem
+  cylinder(X, Y, .25, .95, 1.02, "#e9edf0", "#ffffff");       // cab floor rim
+  cylinder(X, Y, .25, 1.02, 1.24, "#2c5577", null);           // glass
+  /* window mullions */
+  for (let a = .15; a < Math.PI; a += .42){ const px = X + Math.cos(a)*.25*.7 - Math.sin(a)*.25*.7, py = Y + Math.cos(a)*.25*.7 + Math.sin(a)*.25*.7; const p0 = P(px, py, 1.02), p1 = P(px, py, 1.24);
+    c.strokeStyle = "rgba(255,255,255,.75)"; c.lineWidth = Math.max(1, k*.02); c.beginPath(); c.moveTo(p0[0], p0[1]); c.lineTo(p1[0], p1[1]); c.stroke(); }
+  const g = P(X, Y, 1.13); c.fillStyle = "rgba(255,255,255,.25)"; c.beginPath(); c.ellipse(g[0] - k*.14, g[1], k*.06, k*.08, 0, 0, Math.PI*2); c.fill();   // glint
+  cylinder(X, Y, .28, 1.24, 1.3, "#2f7fe0", "#4d95ea");        // roof
+  const r0 = P(X, Y, 1.3), r1 = P(X, Y, 1.42); c.fillStyle = "#2f7fe0"; c.beginPath(); c.ellipse(r0[0], r0[1], k*.2*Math.SQRT2, k*.1*Math.SQRT2, 0, Math.PI, 0); c.lineTo(r1[0], r1[1]); c.closePath(); c.fill();
+  /* antenna and flag */
+  const a0 = P(X, Y, 1.4), a1 = P(X, Y, 1.75), wave = Math.sin(now/300)*k*.03;
+  c.strokeStyle = "#5b4636"; c.lineWidth = Math.max(1.5, k*.03); c.beginPath(); c.moveTo(a0[0], a0[1]); c.lineTo(a1[0], a1[1]); c.stroke();
+  c.fillStyle = "#f0832a"; c.beginPath(); c.moveTo(a1[0], a1[1]); c.quadraticCurveTo(a1[0] + k*.12, a1[1] + k*.03 + wave, a1[0] + k*.26, a1[1] + k*.06 + wave); c.lineTo(a1[0], a1[1] + k*.16); c.closePath(); c.fill();
+}
+/* A jet parked on the apron, nose toward the front-left. Built in board space so it sits in the same perspective as the tiles. */
+function parkedJet(X, Y){
+  const c = V.ctx, k = V.k, h = .2, wf = (pts, col) => poly(pts.map(([x, y, z]) => P(X + x, Y + y, z)), col);
+  /* shadow */
+  const sh = P(X, Y + .05, .005); c.fillStyle = "rgba(0,0,0,.16)"; c.beginPath(); c.ellipse(sh[0], sh[1], k*.55, k*.22, Math.atan2(1, -2)*0 - .46, 0, Math.PI*2); c.fill();
+  /* far wing and far tailplane (behind the body) */
+  wf([[-.06, .02, h], [-.62, -.16, h + .03], [-.62, -.05, h + .03], [-.06, .2, h]], "#dbe4ec");
+  wf([[-.04, -.48, h + .04], [-.2, -.6, h + .06], [-.2, -.53, h + .06], [-.04, -.38, h + .04]], "#dbe4ec");
+  /* far engine */
+  const e1 = P(X - .3, Y + .02, h - .05); c.fillStyle = "#c9d3dc"; c.beginPath(); c.ellipse(e1[0], e1[1], k*.07, k*.05, 0, 0, Math.PI*2); c.fill();
+  /* body: a fat rounded tube from tail to nose */
+  const tail = P(X, Y - .55, h + .06), nose = P(X, Y + .55, h), w = k*.24;
+  c.lineCap = "round"; c.strokeStyle = "#e6edf2"; c.lineWidth = w; c.beginPath(); c.moveTo(tail[0], tail[1]); c.lineTo(nose[0], nose[1]); c.stroke();
+  c.strokeStyle = "#ffffff"; c.lineWidth = w*.78; c.beginPath(); c.moveTo(tail[0], tail[1] - w*.08); c.lineTo(nose[0], nose[1] - w*.08); c.stroke();
+  /* blue cheat line and windows */
+  const ln = (u, off) => [tail[0] + (nose[0] - tail[0])*u, tail[1] + (nose[1] - tail[1])*u + off];
+  c.strokeStyle = "#2f7fe0"; c.lineWidth = Math.max(1.5, w*.13); c.lineCap = "butt"; c.beginPath(); const s0 = ln(.08, w*.18), s1 = ln(.92, w*.18); c.moveTo(s0[0], s0[1]); c.lineTo(s1[0], s1[1]); c.stroke();
+  c.fillStyle = "#2c5577"; for (let n = 0; n < 8; n++){ const p = ln(.2 + n*.075, -w*.05); c.beginPath(); c.arc(p[0], p[1], Math.max(1, w*.07), 0, Math.PI*2); c.fill(); }
+  const ck = ln(.95, -w*.08); c.fillStyle = "#1c3a52"; c.beginPath(); c.ellipse(ck[0], ck[1], w*.2, w*.12, -.46, 0, Math.PI*2); c.fill();   // cockpit
+  /* near wing, engine and tailplane (in front of the body) */
+  wf([[.06, .02, h], [.66, -.18, h - .02], [.66, -.07, h - .02], [.06, .22, h]], "#f4f7fa");
+  wf([[.6, -.18, h - .02], [.66, -.18, h - .02], [.66, -.07, h - .02], [.6, -.05, h - .02]], "#2f7fe0");   // wingtip
+  const e2 = P(X + .3, Y + .05, h - .07); c.fillStyle = "#d5dde4"; c.beginPath(); c.ellipse(e2[0], e2[1], k*.08, k*.06, 0, 0, Math.PI*2); c.fill();
+  c.fillStyle = "#2c3a46"; c.beginPath(); c.ellipse(e2[0] - k*.05, e2[1] + k*.02, k*.035, k*.045, 0, 0, Math.PI*2); c.fill();
+  wf([[.04, -.48, h + .04], [.22, -.6, h + .02], [.22, -.53, h + .02], [.04, -.38, h + .04]], "#f4f7fa");
+  /* tail fin, standing up, in blue with an orange stripe */
+  wf([[0, -.58, h + .1], [0, -.34, h + .1], [0, -.5, h + .44], [0, -.6, h + .44]], "#2f7fe0");
+  wf([[0, -.52, h + .3], [0, -.45, h + .3], [0, -.53, h + .38], [0, -.57, h + .38]], "#f0832a");
+}
 function flag(X, Y, col, hgt){ const c = V.ctx, a = P(X, Y, 0), b = P(X, Y, hgt || .6);
   c.strokeStyle = "#5b4636"; c.lineWidth = Math.max(1.5, V.k*.035); c.beginPath(); c.moveTo(a[0], a[1]); c.lineTo(b[0], b[1]); c.stroke();
   poly([b, [b[0] + V.k*.32, b[1] + V.k*.08], [b[0], b[1] + V.k*.2]], col); }
@@ -104,6 +164,23 @@ function building(level, X, Y, col, along, b){
     house(X + ax[0]*.22, Y + ax[1]*.22, .3, "#fffaf2", col, second); return;
   }
   hotel(X, Y, .42, col, b);
+}
+/* Takes a building apart, the reverse of its construction: x goes from 0 (standing) to 1 (gone).
+   The roof leaves first, then the walls, then the base plate, and a puff of dust rises from the plot. */
+function unbuild(level, X, Y, col, along, x){
+  V.breaking = {n:0}; try { building(level, X, Y, col, along, Math.max(0, 1 - x)); } finally { V.breaking = null; }
+  dustPuff(X, Y, x);
+}
+function unresort(X, Y, s, col, x){
+  V.breaking = {n:0}; try { drop(Math.max(0, 1 - x), () => resort(X, Y, s, col)); } finally { V.breaking = null; }
+  dustPuff(X, Y, x);
+}
+function dustPuff(X, Y, x){
+  if (x <= .05 || x >= 1) return; const c = V.ctx, k = V.k, a = Math.sin(x*Math.PI);
+  c.save();
+  for (let n = 0; n < 8; n++){ const ang = n/8*Math.PI*2 + .3, r = .14 + x*.36, p = P(X + Math.cos(ang)*r, Y + Math.sin(ang)*r, .04 + x*.16 + (n % 2)*.05);
+    c.globalAlpha = .6*a; c.fillStyle = n % 3 ? "#ffffff" : "#e6dfd0"; c.beginPath(); c.arc(p[0], p[1], k*(.06 + x*.09), 0, Math.PI*2); c.fill(); }
+  c.restore();
 }
 function pine(X, Y, s){ { const [sx, sy] = P(X, Y); if (drawAsset("props", "pine", sx, sy, V.k*ASSET_HEIGHTS.props.pine*s)) return; } const c = V.ctx; box3(X - .04*s, Y - .04*s, .08*s, .08*s, .18*s, "#7a5232");
   for (let k = 0; k < 3; k++){ const z = .14*s + k*.2*s, r = (.32 - k*.08)*s; const base = P(X, Y, z), top = P(X, Y, z + .38*s);
@@ -302,7 +379,7 @@ const board = (() => {
   /* someone still walking (only players still in the game count) */
   const walking = () => !!state && state.players.some(p => !p.bankrupt && disp[p.id] && disp[p.id].path);
   function busy(noMoney){ const now = performance.now(); return walking() || now < diceUntil
-    || (!noMoney && flights.some(f => now < f.t0 + (f.dur || MONEY_FLY_MS))) || Object.values(buildPop).some(b => now < b.t + BUILD_POP_MS); }
+    || (!noMoney && flights.some(f => now < f.t0 + (f.dur || MONEY_FLY_MS))) || Object.values(buildPop).some(b => now < popEnd(b)); }
   const OFFS = [[-.2,-.14],[.18,-.16],[-.14,.16],[.2,.12]];
   /* Height of a tile's top right now: tiles with someone on them rest a little lower, and dip when a character lands. */
   const pressT = {}; let occupied = new Set();
@@ -334,14 +411,14 @@ const board = (() => {
   const SPECIAL = {start:"#7fcf6a", jail:"#6cc6e8", expo:"#c9a4ec", jet:"#b9c3cc", fortune:"#f6e6c8", tax:"#efe4d4"};
   /* One tile. From the outer edge toward the road: owner band, buildings, name, price strip. */
   function drawTileTop(i, now){
-    const t = TILES[i], r = tileRect(i), st = state.own[i], g = .035;
+    const t = TILES[i], r = tileRect(i), st = state.own[i], g = .035, view = tileOwnerView(i, now);
     const T = {X0:r.X0 + g, X1:r.X1 - g, Y0:r.Y0 + g, Y1:r.Y1 - g, side:r.side}, e = edgeDir(r.side);
     const top = tileTop(i, now), base = t.type === "city" ? GROUPS[t.g].tint : t.type === "beach" ? "#f3d79a" : SPECIAL[t.type];
     box3(T.X0, T.Y0, T.X1 - T.X0, T.Y1 - T.Y0, top, shade(base, -.18));
     V.lift = top;
     rect3(T.X0, T.Y0, T.X1, T.Y1, 0, base);
     if (t.type === "city"){
-      const o = sub(T, 0, .1); rect3(o.X0, o.Y0, o.X1, o.Y1, .002, st ? byId(state, st.o).color : shade(GROUPS[t.g].color, .25));
+      const o = sub(T, 0, .1); rect3(o.X0, o.Y0, o.X1, o.Y1, .002, view ? view.color : shade(GROUPS[t.g].color, .25));
       const nc = along(r, .62); const small = V.k < 30;
       const nm = small ? t.code : t.name.toUpperCase();
       ptext(nc[0], nc[1], e, nm, fitSize(nm, small ? .26 : .19), 900, shade(GROUPS[t.g].color, -.55), .84);
@@ -372,15 +449,20 @@ const board = (() => {
       poly(ring(.6, .56, .06), "#bfe9f7"); poly(ring(.5, .46, .07), "#f3d79a"); poly(ring(.32, .3, .1), "#e8c47e");
     } else if (t.type === "expo"){
     } else if (t.type === "jet"){
-      const p1 = P(r.X0 + .25, r.Y0 + .8, .003), p2 = P(r.X1 - .25, r.Y0 + .8, .003);
-      rect3(r.X0 + .15, r.Y0 + .62, r.X1 - .15, r.Y0 + .98, .002, "#6f7b86");
-      V.ctx.setLineDash([V.k*.12, V.k*.1]); V.ctx.strokeStyle = "#fff"; V.ctx.lineWidth = Math.max(1, V.k*.03); V.ctx.beginPath(); V.ctx.moveTo(p1[0], p1[1]); V.ctx.lineTo(p2[0], p2[1]); V.ctx.stroke(); V.ctx.setLineDash([]);
+      /* Airport apron: light concrete, a dark runway with white dashes along the front, a yellow taxi line to the plane */
+      rect3(T.X0 + .05, T.Y0 + .05, T.X1 - .05, T.Y1 - .05, .002, "#c3ccd3");
+      rect3(T.X0 + .12, T.Y1 - .48, T.X1 - .12, T.Y1 - .14, .003, "#5d6974");
+      const ry = T.Y1 - .31; V.ctx.setLineDash([V.k*.12, V.k*.09]); V.ctx.strokeStyle = "#ffffff"; V.ctx.lineWidth = Math.max(1, V.k*.03);
+      V.ctx.beginPath(); const q1 = P(T.X0 + .22, ry, .004), q2 = P(T.X1 - .22, ry, .004); V.ctx.moveTo(q1[0], q1[1]); V.ctx.lineTo(q2[0], q2[1]); V.ctx.stroke(); V.ctx.setLineDash([]);
+      for (let n = 0; n < 4; n++){ const xx = T.X0 + .2 + n*.06; rect3(xx, T.Y1 - .44, xx + .03, T.Y1 - .18, .004, "#ffffff"); }   // threshold stripes
+      V.ctx.strokeStyle = "#f2c230"; V.ctx.lineWidth = Math.max(1, V.k*.025); V.ctx.beginPath();
+      const y1 = P(T.X0 + .6, T.Y1 - .48, .004), y2 = P(T.X0 + .6, .74, .004), y3 = P(T.X0 + .6, .45, .004); V.ctx.moveTo(y1[0], y1[1]); V.ctx.lineTo(y2[0], y2[1]); V.ctx.lineTo(y3[0], y3[1]); V.ctx.stroke();
     }
     /* price strip along the inner edge: blank until the city is bought, then the rent in the owner's color, same size on every tile */
     if (t.type === "city" || t.type === "beach"){
       const ins = sub(T, .75, 1 - g/D);   // edge to edge: the full width of the tile top, out to its road-side edge
       const pc = along(r, .87);
-      if (st){ rect3(ins.X0, ins.Y0, ins.X1, ins.Y1, .004, byId(state, st.o).color); ptext(pc[0], pc[1], e, money(rentOf(state, i)).replace("₹", ""), .24, 900, "#ffffff", .8); }
+      if (view){ rect3(ins.X0, ins.Y0, ins.X1, ins.Y1, .004, view.color); ptext(pc[0], pc[1], e, money(view.rent).replace("₹", ""), .24, 900, "#ffffff", .8); }
       else rect3(ins.X0, ins.Y0, ins.X1, ins.Y1, .004, "#fffdf6");   // prices stay hidden until someone buys the city
     }
     /* Chance events: an epidemic tints the whole region green, a blackout darkens one city */
@@ -410,11 +492,9 @@ const board = (() => {
       const cols = ["#e5484d","#2f7fe0","#25a86a","#f0832a","#d4468c","#7c5cd6","#f2b51c","#1f9c8c"];
       for (let k = 0; k < 8; k++){ const a = k*Math.PI/4 + performance.now()/4000; x.strokeStyle = "rgba(107,76,154,.6)"; x.lineWidth = 1; x.beginPath(); x.moveTo(top[0], top[1]); x.lineTo(top[0] + Math.cos(a)*R, top[1] + Math.sin(a)*R); x.stroke();
         x.fillStyle = cols[k]; x.beginPath(); x.roundRect(top[0] + Math.cos(a)*R - V.k*.07, top[1] + Math.sin(a)*R, V.k*.14, V.k*.12, V.k*.03); x.fill(); } })});
-    items.push({dep:S - D/2 + D/2 + .3, f:onTile(24, () => { box3(S - .55, .3, .3, .3, .9, "#dfe5ea"); box3(S - .62, .23, .44, .44, .2, "#7fb6d9", .9);
-      const c = P(S - D/2 - .1, .8, .45), x = V.ctx, k = V.k, fly = Math.sin(performance.now()/700)*k*.05;
-      x.save(); x.translate(c[0], c[1] + fly); x.rotate(-.46); x.fillStyle = "#ffffff"; x.beginPath(); x.ellipse(0, 0, k*.55, k*.1, 0, 0, Math.PI*2); x.fill();
-      x.fillStyle = "#2f7fe0"; x.beginPath(); x.moveTo(-k*.05, 0); x.lineTo(-k*.25, k*.42); x.lineTo(k*.1, 0); x.closePath(); x.fill(); x.beginPath(); x.moveTo(-k*.05, 0); x.lineTo(-k*.2, -k*.32); x.lineTo(k*.08, 0); x.closePath(); x.fill();
-      x.beginPath(); x.moveTo(-k*.42, 0); x.lineTo(-k*.55, -k*.2); x.lineTo(-k*.35, 0); x.closePath(); x.fill(); x.fillStyle = "#cfe8f7"; for (let w = 0; w < 5; w++){ x.beginPath(); x.arc(k*(.05 + w*.07), -k*.02, k*.018, 0, Math.PI*2); x.fill(); } x.restore(); })});
+    /* Airport: a control tower at the back corner and a jet parked on the apron */
+    items.push({dep:(S - .38) + .38 + .6, f:onTile(24, () => controlTower(S - .38, .38, performance.now()))});   // drawn after the jet: the tower stands in front of its tail
+    items.push({dep:(S - D + .64) + .74 + .4, f:onTile(24, () => parkedJet(S - D + .64, .74))});
     for (let i = 0; i < N; i++){ const t = TILES[i]; if (t.type === "beach"){ const r = tileRect(i), a = along(r, .42), e = edgeDir(r.side);
       const pp = e === "X" ? [a[0] + .28, a[1]] : [a[0], a[1] + .28]; items.push({dep:pp[0] + pp[1], f:onTile(i, () => palm(pp[0], pp[1], .7))}); } }
     for (let i = 0; i < N; i++){ if (TILES[i].type !== "tax") continue; const r = tileRect(i), a = along(r, .38); items.push({dep:a[0] + a[1], f:onTile(i, () => { box3(a[0] - .18, a[1] - .14, .36, .28, .16, "#ffffff"); box3(a[0] - .16, a[1] - .12, .32, .24, .06, "#f2e9d8", .16); ptext(a[0], a[1], edgeDir(r.side), "₹", .12, 900, "#c9423a", .3); })}); }
@@ -453,6 +533,7 @@ const board = (() => {
         /* the Expo city shows by its purple flags (no 2x badge) */ })}); });
     Object.keys(state.own).forEach(k => { const i = +k, st = state.own[i]; if (!st || TILES[i].type !== "beach") return; const owner = byId(state, st.o); const r = tileRect(i), a = along(r, .42), e = edgeDir(r.side);
       const pp = e === "X" ? [a[0] - .22, a[1]] : [a[0], a[1] - .22]; items.push({dep:pp[0] + pp[1], f:onTile(i, () => popResort(i, pp[0], pp[1], owner.color))}); });
+    goneBuildings(items);
     const cur = state.players[state.turn];
     state.players.forEach((p, idx) => { if (p.bankrupt) return; const cp = charPos(p, idx, now); if (!cp) return;
       items.push({dep:cp.X + cp.Y + .05, f:() => { const b = P(cp.X, cp.Y, cp.z), h = V.k*1.05;
@@ -672,29 +753,56 @@ const board = (() => {
     c.fillStyle = "#ffffff"; c.fillText(moneyFull(shown), x, y); c.restore();
   }
   /* New buildings pop up on their tile (a quick grow with a little overshoot) a moment after they are bought */
-  const BUILD_POP_DELAY = 1500, BUILD_POP_MS = 1300, RESORT_POP_MS = 450;   // construction time for a new building; the beach resort just pops
+  /* When a tile's building changes (bought, upgraded, bought out, gifted, knocked down, wiped out, sold), the old one
+     comes apart over BREAK_MS (unbuild) and then the new one is constructed over BUILD_POP_MS, BUILD_POP_DELAY after the move. */
+  const BUILD_POP_DELAY = 1500, BUILD_POP_MS = 1300, RESORT_POP_MS = 450, BREAK_MS = 750;
   let prevLevels = {}; const buildPop = {};
-  const levelsOf = s => Object.fromEntries(Object.entries(s.own).map(([i, st]) => [i, st ? st.l : 0]));
+  const levelsOf = s => Object.fromEntries(Object.entries(s.own).filter(([i, st]) => st).map(([i, st]) => { const o = byId(s, st.o); return [i, {l:st.l, o:st.o, color:o ? o.color : "#9aa6b0", rent:rentOf(s, +i)}]; }));
+  /* What the tile's owner band and rent strip show. While the old building is still standing or coming apart they keep
+     the old owner's color and rent; they switch the moment it is gone, as the new one starts to go up. null: unowned. */
+  function tileOwnerView(i, now){
+    const P0 = buildPop[i];
+    if (P0 && P0.from && now < P0.t + P0.brk) return {color:P0.from.color, rent:P0.from.rent};
+    const st = state.own[i], o = st && byId(state, st.o); return o ? {color:o.color, rent:rentOf(state, i)} : null;
+  }
+  const popEnd = P0 => P0.t + P0.brk + (P0.to ? (TILES[P0.i].type === "beach" ? RESORT_POP_MS : BUILD_POP_MS) : 0);
   function popNewBuildings(s){
     const now = performance.now(), lv = levelsOf(s);
-    Object.keys(lv).forEach(i => { if ((TILES[i].type === "city" || TILES[i].type === "beach") && lv[i] > (prevLevels[i] || 0) && !reduce.matches) buildPop[i] = {t:now + BUILD_POP_DELAY, from:prevLevels[i] || 0}; });
+    if (!reduce.matches) new Set([...Object.keys(lv), ...Object.keys(prevLevels)]).forEach(k => { const i = +k, ty = TILES[i].type; if (ty !== "city" && ty !== "beach") return;
+      const was = prevLevels[k], is = lv[k]; if (!was && !is) return; if (was && is && was.l === is.l && was.o === is.o) return;
+      buildPop[i] = {i, t:now + BUILD_POP_DELAY, from:was || null, to:is || null, brk:was ? BREAK_MS : 0}; });
     prevLevels = lv;
   }
-  /* A newly bought beach resort pops up the same way as a building */
+  function breakSound(P0){ if (!P0.bsound){ P0.bsound = true; sfx("unbuild"); } }
+  /* A newly bought beach resort pops up; one that changes hands or is sold comes apart first */
   function popResort(i, X, Y, color){
     const P0 = buildPop[i], now = performance.now();
-    if (P0 && now < P0.t) return;
-    if (!P0 || now - P0.t >= RESORT_POP_MS){ if (P0) delete buildPop[i]; return resort(X, Y, .8, color); }
-    const u = (now - P0.t)/RESORT_POP_MS, s = 1 + 2.7*Math.pow(u - 1, 3) + 1.7*Math.pow(u - 1, 2), [bx, by] = P(X, Y, 0), c = V.ctx;
+    if (!P0 || !P0.to) return resort(X, Y, .8, color);
+    if (now < P0.t){ if (P0.from) resort(X, Y, .8, P0.from.color); return; }
+    if (now < P0.t + P0.brk){ breakSound(P0); return unresort(X, Y, .8, P0.from.color, (now - P0.t)/P0.brk); }
+    const u = (now - P0.t - P0.brk)/RESORT_POP_MS; if (u >= 1){ delete buildPop[i]; return resort(X, Y, .8, color); }
+    const s = 1 + 2.7*Math.pow(u - 1, 3) + 1.7*Math.pow(u - 1, 2), [bx, by] = P(X, Y, 0), c = V.ctx;
     c.save(); c.translate(bx, by); c.scale(s, s); c.translate(-bx, -by); resort(X, Y, .8, color); c.restore();
   }
   function popBuilding(i, l, X, Y, color, e){
     const P0 = buildPop[i], now = performance.now();
-    if (!P0) return building(l, X, Y, color, e);
-    if (now < P0.t){ if (P0.from) building(P0.from, X, Y, color, e); return; }
-    const u = (now - P0.t)/BUILD_POP_MS; if (u >= 1){ delete buildPop[i]; return building(l, X, Y, color, e); }
+    if (!P0 || !P0.to) return building(l, X, Y, color, e);
+    if (now < P0.t){ if (P0.from) building(P0.from.l, X, Y, P0.from.color, e); return; }   // the old one stands until it is time
+    if (now < P0.t + P0.brk){ breakSound(P0); return unbuild(P0.from.l, X, Y, P0.from.color, e, (now - P0.t)/P0.brk); }
+    const u = (now - P0.t - P0.brk)/BUILD_POP_MS; if (u >= 1){ delete buildPop[i]; return building(l, X, Y, color, e); }
     if (!P0.sound){ P0.sound = true; sfx("build"); }
     building(l, X, Y, color, e, u);   // constructed piece by piece
+  }
+  /* A building whose tile is no longer owned (wiped out, sold, owner bankrupt) still has to come apart */
+  function goneBuildings(items){
+    const now = performance.now();
+    Object.values(buildPop).forEach(P0 => { const i = P0.i; if (P0.to || !P0.from || state.own[i]) return;
+      if (now >= P0.t + P0.brk){ delete buildPop[i]; return; }
+      const r = tileRect(i), e = edgeDir(r.side), beach = TILES[i].type === "beach", a = along(r, beach ? .42 : .3), pp = !beach ? a : e === "X" ? [a[0] - .22, a[1]] : [a[0], a[1] - .22];
+      items.push({dep:pp[0] + pp[1], f:onTile(i, () => {
+        if (now < P0.t) return beach ? resort(pp[0], pp[1], .8, P0.from.color) : building(P0.from.l, pp[0], pp[1], P0.from.color, e);
+        breakSound(P0); const x = (now - P0.t)/P0.brk;
+        beach ? unresort(pp[0], pp[1], .8, P0.from.color, x) : unbuild(P0.from.l, pp[0], pp[1], P0.from.color, e, x); })}); });
   }
   function hit(mx, my){
     const a = (mx - V.ox)/V.k, b = (my - V.oy + TILE_H*V.k)*2/V.k, X = (a + b)/2, Y = (b - a)/2;

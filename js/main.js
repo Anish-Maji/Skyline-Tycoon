@@ -119,7 +119,9 @@ function renderPlayers(){
     const props = owned(s, p.id).length;
     const av = document.createElement("div"); av.className = "cp-av";
     const size = innerWidth <= 640 ? 46 : 68, facing = corner === "tl" || corner === "bl" ? "right" : "left";
-    av.appendChild(tycoonArt.liveCanvas(size, size, (c, t) => drawTycoon(c, size/2, size*1.9, size*1.85, p.look ?? idx, {facing, t:t + idx*1.3})));
+    /* the picture fills the whole box (82 tall on desktop, 46 square on phones) with the face in the middle */
+    const avH = innerWidth <= 640 ? 46 : 82, avScale = innerWidth <= 640 ? 1.6 : 1.78, avLift = innerWidth <= 640 ? 1.3 : 1.38;
+    av.appendChild(tycoonArt.liveCanvas(size, avH, (c, t) => drawTycoon(c, size/2, avH/2 + size*avLift, size*avScale, p.look ?? idx, {facing, t:t + idx*1.3})));
     d.appendChild(av);
     if (canThrowAt(idx)){ av.classList.add("throwable"); av.title = `Throw a tomato at ${p.name}`; av.setAttribute("role", "button"); av.tabIndex = 0;
       av.onclick = () => throwTomato(idx); av.onkeydown = e => { if (e.key === "Enter" || e.key === " "){ e.preventDefault(); throwTomato(idx); } }; }
@@ -344,10 +346,11 @@ function syncPopup(){
   const key = s.rev + ":" + s.pending.k;
   if (app.popDismissed === key) { m.hidden = true; return; }
   if (app.popKey === key && !m.hidden) return;
-  /* Can not afford it: the blue "not enough money" band shows first, then the popup opens with everything locked */
+  /* Can not afford it (a city, a beach or a buyout): the blue "not enough money" band says so, then the turn simply moves on, no locked card */
   const k = s.pending.k, t = TILES[s.pending.tile], need = k === "takeover" ? s.pending.cost : k === "buy" ? t.price : 0;
   if (need > p.cash && poorUI.key !== key){ poorUI.key = key;
-    showAlert(`YOU DON'T HAVE ENOUGH MONEY TO ${k === "takeover" ? "BUY OUT" : "BUY"} THIS ${t.type === "beach" ? "BEACH" : "CITY"}`, ALERT_MS, syncPopup); return; }
+    const after = () => { const c = app.s; if (c && c.rev + ":" + (c.pending && c.pending.k) === key) dispatch({t:"skip"}); };
+    showAlert(`YOU DON'T HAVE ENOUGH MONEY TO ${k === "takeover" ? "BUY OUT" : "BUY"} THIS ${t.type === "beach" ? "BEACH" : "CITY"}`, ALERT_MS, after); return; }
   if (poorUI.key === key && poorUI.until > Date.now()) return;
   app.popKey = key; buildPopup(s, p); m.hidden = false; setTimeout(() => $("bbuy").focus(), 30);
 }

@@ -538,7 +538,19 @@ addEventListener("pagehide", saveOffline);
 /* ================= SCREENS ================= */
 function openSheet(html, kind){ $("sheet").className = "sheet" + (kind ? " " + kind : ""); $("sheet").innerHTML = html; $("overlay").hidden = false; }
 function closeSheet(){ $("overlay").hidden = true; }
-/* How to play. The text follows the game's Quick settings (or the saved ones on the home screen). */
+/* The home screen, the character picker and the online lobby are full pages: the board behind them is hidden
+   (.overlay.page in styles.css, body[data-page] moves Music and Sound to the corner). Moving to another page slides it in. */
+const PAGE_VIEWS = ["home", "offline", "lobby"];
+let shownPage = null;
+function syncPage(){
+  const ov = $("overlay"), page = !ov.hidden && PAGE_VIEWS.includes(ov.dataset.view) ? ov.dataset.view : null;
+  ov.classList.toggle("page", !!page); document.body.dataset.page = page ? "1" : "";
+  /* the toolbar lives in the board's layer, which sits under the page: lift it onto the page while one shows */
+  const tb = document.querySelector(".toolbar"), home = $("stage"); if (page && tb.parentNode !== document.body) document.body.appendChild(tb); else if (!page && tb.parentNode !== home) home.insertBefore(tb, $("hub"));
+  if (page && page !== shownPage){ const sh = $("sheet"); sh.classList.remove("enter"); void sh.offsetWidth; sh.classList.add("enter"); }
+  shownPage = page;
+}
+new MutationObserver(syncPage).observe($("overlay"), {attributes:true, attributeFilter:["data-view", "hidden"]}); syncPage();/* How to play. The text follows the game's Quick settings (or the saved ones on the home screen). */
 function rulesHtml(R){
   R = Object.assign({}, DEFAULT_SETTINGS, R);
   const wins = [R.tripleMonopoly && "three full color sets", R.beachMonopoly && "all four beaches", R.lineMonopoly && "every city on one side"].filter(Boolean);

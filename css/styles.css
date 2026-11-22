@@ -46,6 +46,26 @@ select,input[type=text]{border:1.5px solid var(--line);background:var(--bg);bord
 .kv dt{color:var(--muted)}.kv dd{margin:0;font-weight:700;text-align:right;font-variant-numeric:tabular-nums}
 .muted{color:var(--muted);font-size:13px}
 .overlay{position:fixed;inset:0;background:var(--scrim);display:grid;place-items:center;z-index:20;padding:20px max(16px, env(safe-area-inset-left, 0px));overflow:auto}
+/* Full pages (home, character picker, online lobby): the board is hidden behind a page of its own,
+   a soft sky with a warm glow, a faint isometric grid and a city skyline along the bottom. */
+.overlay.page{background:
+  radial-gradient(1100px 520px at 50% -12%, color-mix(in srgb, var(--accent) 34%, transparent), transparent 65%),
+  radial-gradient(800px 420px at 105% 105%, color-mix(in srgb, var(--gold) 20%, transparent), transparent 65%),
+  linear-gradient(180deg, var(--sky), var(--bg) 75%);
+  padding-top:64px;padding-bottom:40px}
+.overlay.page::before{content:"";position:fixed;inset:0;pointer-events:none;opacity:.8;
+  background:repeating-linear-gradient(30deg, transparent 0 46px, var(--line) 46px 47px), repeating-linear-gradient(-30deg, transparent 0 46px, var(--line) 46px 47px);
+  -webkit-mask:linear-gradient(180deg, #000, transparent 70%);mask:linear-gradient(180deg, #000, transparent 70%)}
+.overlay.page::after{content:"";position:fixed;left:0;right:0;bottom:0;height:150px;pointer-events:none;background:var(--line);opacity:.7;
+  -webkit-mask:var(--skyline) repeat-x left bottom/auto 100%;mask:var(--skyline) repeat-x left bottom/auto 100%;
+  --skyline:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='640' height='150'%3E%3Cpath d='M0 150V96h30V70h22v26h18V52h34v98h10V84h26V40h12V24h8v16h12v110h14V92h40v58h8V64h30V44h20v106h16V78h28v72h12V30h14V12h6v18h14v120h18V88h36v62h10V58h26V36h22v114h14V100h30v50h12V72h24V50h18v100h16V82h34v68z' fill='%23000'/%3E%3C/svg%3E")}
+.overlay.page .sheet{position:relative;z-index:1;box-shadow:0 30px 80px rgba(0,0,0,.28), 0 0 0 1px var(--line)}
+.overlay.page .sheet.enter{animation:pageIn .38s cubic-bezier(.2,.9,.3,1) both}
+@keyframes pageIn{from{opacity:0;transform:translateY(18px) scale(.985)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.overlay.page .sheet.enter{animation:none}}
+/* on a page, Music and Sound sit in the top-right corner above it; Menu and the game chips are hidden */
+body[data-page="1"] .toolbar{position:fixed;z-index:30;top:14px;right:16px;left:auto;bottom:auto;transform:none}
+body[data-page="1"] #menuBtn, body[data-page="1"] #roomChip, body[data-page="1"] #clockChip{display:none}
 .sheet{background:var(--surface);border-radius:var(--radius-2xl);padding:24px;width:min(460px,100%);box-shadow:0 30px 70px rgba(0,0,0,.35);display:flex;flex-direction:column;gap:14px}
 .sheet h1{font-family:var(--display);font-size:32px;line-height:1;margin:0;letter-spacing:.01em}
 .sheet h3{margin:0;font-size:13px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}

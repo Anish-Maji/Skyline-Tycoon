@@ -78,6 +78,7 @@ To check rules changes, run a headless bot simulation with Node: concatenate `co
 
 1. Home (`showHome`): name, Host a game, Join a game by code or invite link (`#room=CODE`), or Play offline.
 2. Character picker (`renderPicker`, used by `showLobby` online and `showOfflineSetup` offline): four seats, 12 characters, no duplicates. Starting with one player adds a bot.
+Screens 1 and 2 (and the online lobby) are full pages, not popups over the board: `syncPage` in main.js adds `.page` to `#overlay` for the views in `PAGE_VIEWS`, which hides the board behind a page background (sky gradient, warm glow, faint isometric grid, skyline silhouette: `.overlay.page` in styles.css), moves Music and Sound to the top-right corner (`body[data-page]`, the toolbar is lifted onto the page) and hides Menu. A new page slides in (`.sheet.enter`).
 3. The game, full screen. Player panels sit in the four corners (seat 1 top-left, then clockwise). Dice, the turn line, short prompts for your own move and move buttons sit in the middle of the board. There is no tile details card: tapping a tile only works when a move asks you to pick one (`board.setSelectable`).
 
 ## Characters

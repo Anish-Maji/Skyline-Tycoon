@@ -6,8 +6,8 @@ const HUB_AT = .63;   // where the move buttons sit on the board: .5 is the midd
 function P(X, Y, Z){ return [V.ox + (X - Y)*V.k, V.oy + (X + Y)*V.k/2 - ((Z||0) + V.lift)*V.k]; }
 /* Tiles are raised blocks. TILE_H is their height above the road, TILE_DIP how far one sinks when a character lands. */
 const TILE_H = .14, TILE_DIP = .08, TILE_REST = .025;
-/* Opacity of characters waiting for their turn */
-const IDLE_ALPHA = .6;
+/* Opacity of characters waiting for their turn, and of players stranded on Lost Island (also drawn grey) */
+const IDLE_ALPHA = .6, STUCK_ALPHA = .5;
 function poly(pts, fill, stroke, lw){ const c = V.ctx; c.beginPath(); pts.forEach((p, k) => k ? c.lineTo(p[0], p[1]) : c.moveTo(p[0], p[1])); c.closePath(); if (fill){ c.fillStyle = fill; c.fill(); } if (stroke){ c.strokeStyle = stroke; c.lineWidth = lw||1; c.lineJoin = "round"; c.stroke(); } }
 /* ================= ASSET LOADER ================= */
 const IMG = {};
@@ -182,6 +182,67 @@ function dustPuff(X, Y, x){
     c.globalAlpha = .6*a; c.fillStyle = n % 3 ? "#ffffff" : "#e6dfd0"; c.beginPath(); c.arc(p[0], p[1], k*(.06 + x*.09), 0, Math.PI*2); c.fill(); }
   c.restore();
 }
+/* An angry cartoon dog (drawn in code) that chases a player to Lost Island after the Storm warning card:
+   hackles up, ears pinned back, a frown, a snarl with fangs, and spit flying. Leans forward as it runs.
+   (x, y) is the screen point under its feet, s its size in px, dir 1 runs right and -1 left, t is time in seconds. */
+function drawDog(c, x, y, s, dir, t, run){
+  const fur = "#b9763c", far = "#93582a", dark = "#5a3416", light = "#f1d6b4", sw = run ? t*24 : t*3;
+  c.save(); c.translate(x, y);
+  c.fillStyle = "rgba(0,0,0,.2)"; c.beginPath(); c.ellipse(0, 0, s*.38, s*.08, 0, 0, Math.PI*2); c.fill();   // shadow
+  c.scale(dir*s/100, s/100); c.translate(0, run ? -Math.abs(Math.sin(sw))*6 : 0);   // a 100-unit box, feet at 0
+  if (run) c.rotate(.08);   // leaning into the chase
+  const leg = (px, ph, col) => { c.save(); c.translate(px, -26); c.rotate(run ? Math.sin(sw + ph)*.8 : 0); c.fillStyle = col;
+    c.beginPath(); if (c.roundRect) c.roundRect(-5, 0, 10, 25, 5); else c.rect(-5, 0, 10, 25); c.fill(); c.beginPath(); c.ellipse(2, 24, 7.5, 4, 0, 0, Math.PI*2); c.fill(); c.restore(); };
+  /* tail, stiff and up */
+  const flick = Math.sin(t*(run ? 20 : 8))*4; c.strokeStyle = fur; c.lineWidth = 8; c.lineCap = "round";
+  c.beginPath(); c.moveTo(-30, -42); c.quadraticCurveTo(-40, -58 + flick*.5, -36, -74 + flick); c.stroke();
+  leg(-22, Math.PI, far); leg(18, 0, far);                                                     // far legs
+  c.fillStyle = fur; c.beginPath(); c.ellipse(0, -36, 35, 18, 0, 0, Math.PI*2); c.fill();      // body
+  c.fillStyle = light; c.beginPath(); c.ellipse(6, -27, 22, 8, 0, 0, Math.PI*2); c.fill();     // belly
+  /* hackles: a ridge of raised fur along the back */
+  c.fillStyle = dark; c.beginPath(); c.moveTo(-24, -48);
+  for (let k = 0; k < 6; k++){ const x0 = -24 + k*8; c.lineTo(x0 + 4, -60 - (k % 2)*3 - (run ? Math.abs(Math.sin(sw + k))*2 : 0)); c.lineTo(x0 + 8, -51); }
+  c.lineTo(22, -48); c.closePath(); c.fill();
+  leg(-14, 0, fur); leg(26, Math.PI, fur);                                                     // near legs
+  c.fillStyle = "#2b2b2b"; c.beginPath(); c.ellipse(28, -46, 6, 11, .5, 0, Math.PI*2); c.fill();   // black spiked collar
+  c.fillStyle = "#d9dde2"; [[24, -54], [28, -46], [32, -38]].forEach(([sx, sy]) => { c.beginPath(); c.moveTo(sx - 2, sy); c.lineTo(sx + 5, sy - 1); c.lineTo(sx - 1, sy + 3); c.closePath(); c.fill(); });
+  /* head */
+  c.fillStyle = fur; c.beginPath(); c.arc(38, -58, 17, 0, Math.PI*2); c.fill();
+  c.fillStyle = dark; c.save(); c.translate(26, -66); c.rotate(-1.15 + (run ? Math.sin(sw)*.12 : 0)); c.beginPath(); c.ellipse(0, 8, 6, 13, 0, 0, Math.PI*2); c.fill(); c.restore();   // ear pinned back
+  c.fillStyle = light; c.beginPath(); c.ellipse(54, -53, 13, 7.5, -.08, 0, Math.PI*2); c.fill();   // upper snout
+  /* snarl: open jaw with fangs */
+  const jaw = run ? 5 + Math.abs(Math.sin(sw*.5))*4 : 4;
+  c.fillStyle = "#7a1c22"; c.beginPath(); c.moveTo(43, -48); c.lineTo(66, -50); c.lineTo(62, -48 + jaw); c.lineTo(46, -44 + jaw); c.closePath(); c.fill();   // mouth
+  c.fillStyle = light; c.beginPath(); c.ellipse(53, -41 + jaw, 11, 4.5, -.05, 0, Math.PI*2); c.fill();   // lower jaw
+  c.fillStyle = "#ffffff";
+  [[47, -48], [53, -48.6], [59, -49.2]].forEach(([fx, fy], n) => { c.beginPath(); c.moveTo(fx - 2.4, fy); c.lineTo(fx + 2.4, fy - .3); c.lineTo(fx, fy + (n === 0 ? 6 : 4)); c.closePath(); c.fill(); });   // upper fangs
+  [[50, -45 + jaw], [58, -46 + jaw]].forEach(([fx, fy]) => { c.beginPath(); c.moveTo(fx - 2.2, fy); c.lineTo(fx + 2.2, fy); c.lineTo(fx, fy - 4.5); c.closePath(); c.fill(); });   // lower fangs
+  c.fillStyle = "#1c1c1c"; c.beginPath(); c.ellipse(66, -56, 5, 4, 0, 0, Math.PI*2); c.fill();   // nose
+  c.strokeStyle = dark; c.lineWidth = 1.6; [[52, -60], [56, -61]].forEach(([wx, wy]) => { c.beginPath(); c.moveTo(wx, wy); c.lineTo(wx + 4, wy + 1.5); c.stroke(); });   // snout wrinkles
+  /* angry eye: white with a small pupil, under a heavy brow slanting down to the nose */
+  c.fillStyle = "#fff"; c.beginPath(); c.ellipse(43, -62, 4.4, 3.4, 0, 0, Math.PI*2); c.fill();
+  c.fillStyle = "#1c1c1c"; c.beginPath(); c.arc(44.6, -61.6, 2, 0, Math.PI*2); c.fill();
+  c.fillStyle = dark; c.beginPath(); c.moveTo(34, -71); c.lineTo(50, -64); c.lineTo(49, -61.5); c.lineTo(35, -66.5); c.closePath(); c.fill();   // brow
+  /* spit flying from the mouth while it runs */
+  if (run){ c.fillStyle = "rgba(225,245,255,.95)"; for (let k = 0; k < 3; k++){ const ph = (t*2.6 + k/3) % 1; c.globalAlpha = 1 - ph; c.beginPath(); c.arc(64 + ph*20, -44 - Math.sin(ph*Math.PI)*12 + k*3, 2.2 - ph, 0, Math.PI*2); c.fill(); } c.globalAlpha = 1; }
+  c.restore();
+}
+/* Sweat drops flying off a character running from the dog. (x, yFeet) is under their feet on screen, h their height in px,
+   dir the way they run on screen (1 right, -1 left): drops fly up and back. */
+function sweatDrops(c, x, yFeet, h, now, dir){
+  const hx = x, hy = yFeet - h*.92;   // around the top of the head
+  c.save();
+  for (let k = 0; k < 5; k++){ const ph = (now/480 + k/5) % 1, side = k % 2 ? 1 : -1;
+    const dx = side*h*(.16 + ph*.14) - dir*ph*h*.12, dy = -Math.sin(ph*Math.PI)*h*.16 + ph*h*.12;
+    c.globalAlpha = 1 - ph*.85; sweatDrop(c, hx + dx, hy + dy, Math.max(2.6, h*.065*(1 - ph*.35)), side*(.35 + ph*.6)); }
+  c.globalAlpha = 1; sweatDrop(c, hx + h*.13*(dir > 0 ? -1 : 1), hy + h*.14, Math.max(2.4, h*.05), 0);   // a bead on the forehead
+  c.restore();
+}
+function sweatDrop(c, x, y, r, tilt){
+  c.save(); c.translate(x, y); c.rotate(tilt); c.fillStyle = "#86d6f7"; c.strokeStyle = "#2b8fc4"; c.lineWidth = Math.max(1, r*.28);
+  c.beginPath(); c.moveTo(0, -r*1.9); c.quadraticCurveTo(r*1.05, -r*.4, r, r*.2); c.arc(0, r*.2, r, 0, Math.PI); c.quadraticCurveTo(-r*1.05, -r*.4, 0, -r*1.9); c.closePath(); c.fill(); c.stroke();
+  c.fillStyle = "rgba(255,255,255,.85)"; c.beginPath(); c.arc(-r*.35, 0, r*.3, 0, Math.PI*2); c.fill(); c.restore();
+}
 function pine(X, Y, s){ { const [sx, sy] = P(X, Y); if (drawAsset("props", "pine", sx, sy, V.k*ASSET_HEIGHTS.props.pine*s)) return; } const c = V.ctx; box3(X - .04*s, Y - .04*s, .08*s, .08*s, .18*s, "#7a5232");
   for (let k = 0; k < 3; k++){ const z = .14*s + k*.2*s, r = (.32 - k*.08)*s; const base = P(X, Y, z), top = P(X, Y, z + .38*s);
     c.fillStyle = shade("#2f8f4e", -k*.05); c.beginPath(); c.moveTo(base[0] - r*V.k, base[1]); c.lineTo(top[0], top[1]); c.lineTo(base[0] + r*V.k, base[1]); c.closePath(); c.fill();
@@ -304,14 +365,23 @@ const board = (() => {
       if (!d || first){ disp[p.id] = {pos:p.pos, path:null}; return; }
       /* Bankrupt players are no longer drawn, so their walk would never finish and the board would stay busy forever */
       if (p.bankrupt){ d.pos = p.pos; d.path = null; return; }
-      const lm = s.lastMove;
-      if (lm && lm.seq !== lastSeq && lm.pid === p.id && lm.kind === "walk" && !reduce.matches){
+      const lm = s.lastMove, fresh = lm && lm.seq !== lastSeq && lm.pid === p.id;
+      /* Storm warning: walk to the Chance tile as usual, wait there while the card shows, then run to Lost Island with a dog behind */
+      if (fresh && lm.kind === "chase" && !reduce.matches){
+        const steps = (lm.from - d.pos + N) % N, walk = [d.pos]; if (steps <= 12) for (let k = 1; k <= steps; k++) walk.push((d.pos + k) % N);
+        const run = [lm.from]; for (let k = 1, n = (lm.to - lm.from + N) % N; k <= n; k++) run.push((lm.from + k) % N);
+        d.chase = {path:run, born:performance.now()};
+        if (walk.length > 1){ d.path = walk; d.t0 = walkAt; d.hopsDone = 0; } else { d.path = null; d.pos = lm.from; }
+        return;
+      }
+      if (d.chase && !fresh) return;   // a chase is still playing: leave this player alone
+      if (fresh && lm.kind === "walk" && !reduce.matches){
         const steps = (lm.to - d.pos + N) % N;
         if (steps > 0 && steps <= 12){ const path = [d.pos]; for (let k = 1; k <= steps; k++) path.push((d.pos + k) % N);
           if (p.pos !== lm.to) path.push(p.pos);
           d.path = path; d.t0 = walkAt; d.hopsDone = 0; return; }
       }
-      if (d.pos !== p.pos && !d.path){ d.pos = p.pos; playLanding(p.pos); }
+      if (d.pos !== p.pos && !d.path){ d.pos = p.pos; playLanding(p.pos, p.id); }
       else if (d.path && d.path[d.path.length-1] !== p.pos) d.path.push(p.pos);
     });
     if (s.lastMove) lastSeq = s.lastMove.seq;
@@ -378,7 +448,9 @@ const board = (() => {
   /* noMoney: ignore cash stacks still waiting (the Chance card shows first, then the money) */
   /* someone still walking (only players still in the game count) */
   const walking = () => !!state && state.players.some(p => !p.bankrupt && disp[p.id] && disp[p.id].path);
-  function busy(noMoney){ const now = performance.now(); return walking() || now < diceUntil
+  /* a dog chase that hasn't finished. busy(true) (the Chance card waiting for the walk) ignores it, since the chase waits for the card */
+  const chasing = () => !!state && state.players.some(p => !p.bankrupt && disp[p.id] && disp[p.id].chase && !disp[p.id].chase.done);
+  function busy(noMoney){ const now = performance.now(); return walking() || (!noMoney && chasing()) || now < diceUntil
     || (!noMoney && flights.some(f => now < f.t0 + (f.dur || MONEY_FLY_MS))) || Object.values(buildPop).some(b => now < popEnd(b)); }
   const OFFS = [[-.2,-.14],[.18,-.16],[-.14,.16],[.2,.12]];
   /* Height of a tile's top right now: tiles with someone on them rest a little lower, and dip when a character lands. */
@@ -392,12 +464,69 @@ const board = (() => {
   /* Draws fn with everything lifted to tile i's top */
   const onTile = (i, fn) => () => { V.lift = tileTop(i, performance.now()); fn(); V.lift = 0; };
   function stand(i, idx){ const r = tileRect(i); const a = r.side === "c" ? [(r.X0 + r.X1)/2, (r.Y0 + r.Y1)/2] : along(r, .5); const o = OFFS[idx % 4]; return [a[0] + o[0], a[1] + o[1]]; }
+  /* ---------- Dog chase to Lost Island ----------
+     After the Storm warning card closes, the player runs tile by tile (CHASE_HOP per tile) from the Chance tile all the way
+     round to Lost Island, with a dog DOG_LAG tiles behind, barking. Only for show: the move itself (no rent, no Start money)
+     was already made by the engine. The dog stops one tile short, waits DOG_STAY, then fades away (DOG_FADE). */
+  const DOG_SIZE = .95;   // dog size in tile units (a character is about 1.05)
+  const CHASE_HOP = 150, DOG_LAG = 1.5, DOG_STAY = 900, DOG_FADE = 450, CHASE_HOLD_MAX = 20000;
+  let chaseHold = null;
+  /* The barks (SOUND_FILES dog1 to dog3 in config.js), fitted to how long the run is: it opens with a single woof, then the
+     long run of barks if there is room, then single woofs, swapping between the two, until the dog stops. A run from far away
+     (Kolkata side) gets many, one from the last Chance near Lost Island only a couple. ms is each clip's length, woofs when
+     WOOF! pops up within it. */
+  const DOG_BARKS = {long:{sfx:"dog1", ms:2040, woofs:[0, 550, 1150, 1650]}, short:[{sfx:"dog2", ms:440, woofs:[0]}, {sfx:"dog3", ms:440, woofs:[0]}]}, BARK_GAP = 260;
+  function planBarks(runMs){
+    const plan = [], add = (b, at) => plan.push({at, sfx:b.sfx, woofs:b.woofs.map(w => at + w)});
+    let t = 0, s = 0, longDone = false; add(DOG_BARKS.short[s++ % 2], t); t += DOG_BARKS.short[0].ms + BARK_GAP;
+    while (true){ const left = runMs - t;
+      if (!longDone && left >= DOG_BARKS.long.ms){ add(DOG_BARKS.long, t); t += DOG_BARKS.long.ms + BARK_GAP; longDone = true; }
+      else if (left >= DOG_BARKS.short[0].ms){ const b = DOG_BARKS.short[s++ % 2]; add(b, t); t += b.ms + BARK_GAP; if (left > 2*DOG_BARKS.long.ms) longDone = false; }
+      else break; }
+    return plan;
+  }
+  function pathPoint(path, u, idx, now){
+    const n = path.length - 1; if (n < 1 || u >= n){ const t = path[n], a = stand(t, idx); return {X:a[0], Y:a[1], z:tileTop(t, now), tile:t, k:Math.max(0, n - 1)}; }
+    const k = Math.floor(Math.max(0, u)), f = Math.max(0, u) - k, a = stand(path[k], idx), b = stand(path[k + 1], idx);
+    return {X:a[0] + (b[0] - a[0])*f, Y:a[1] + (b[1] - a[1])*f, z:tileTop(path[k], now) + (tileTop(path[k + 1], now) - tileTop(path[k], now))*f, tile:path[f < .5 ? k : k + 1], k};
+  }
+  function chasePos(d, idx, now){
+    const ch = d.chase, n = ch.path.length - 1;
+    if (ch.t0 == null){
+      if (chaseHold && chaseHold() && now - ch.born < CHASE_HOLD_MAX){ const q = pathPoint(ch.path, 0, idx, now); return {X:q.X, Y:q.Y, z:q.z, walking:false, tile:q.tile}; }   // the card is still up
+      ch.t0 = now + 350;
+    }
+    const u = (now - ch.t0)/CHASE_HOP;
+    if (u >= n){ ch.done = true; d.pos = ch.path[n]; press(d.pos); playLanding(d.pos); return null; }
+    if (u > 0 && Math.floor(u) > (ch.k || 0)){ ch.k = Math.floor(u); press(ch.path[ch.k]); }
+    const q = pathPoint(ch.path, u, idx, now), a = P(...stand(ch.path[q.k], idx)), b = P(...stand(ch.path[Math.min(n, q.k + 1)], idx));
+    return {X:q.X, Y:q.Y, z:q.z + (u > 0 ? Math.abs(Math.sin(u*Math.PI))*.14 : 0), walking:u > 0, tile:q.tile, chased:u > 0, dir:b[0] >= a[0] ? 1 : -1};
+  }
+  function drawChaseDogs(items, now){
+    state.players.forEach((p, idx) => { const d = disp[p.id], ch = d && d.chase; if (!ch || ch.t0 == null || p.bankrupt) return;
+      const n = ch.path.length - 1, u = (now - ch.t0)/CHASE_HOP - DOG_LAG, stop = Math.max(0, n - 1), end = ch.t0 + (stop + DOG_LAG)*CHASE_HOP;
+      if (now > end + DOG_STAY + DOG_FADE){ if (ch.done) d.chase = null; return; }
+      const alpha = now > end + DOG_STAY ? 1 - (now - end - DOG_STAY)/DOG_FADE : Math.min(1, (now - ch.t0 + 350)/300);
+      const q = pathPoint(ch.path, Math.min(stop, Math.max(0, u)), (idx + 2) % 4, now), run = u > 0 && u < stop;
+      const a = P(...stand(ch.path[q.k], 0)), b = P(...stand(ch.path[Math.min(n, q.k + 1)], 0)), dir = b[0] >= a[0] ? 1 : -1;
+      /* the barks for this run, planned once: the run, plus a moment of barking at the island */
+      if (!ch.barks){ ch.barks = planBarks((stop + DOG_LAG)*CHASE_HOP + 400); ch.next = 0; ch.woofs = ch.barks.flatMap(b => b.woofs); }
+      const el = now - ch.t0; while (ch.next < ch.barks.length && el >= ch.barks[ch.next].at){ sfx(ch.barks[ch.next].sfx); ch.next++; }
+      const lastWoof = ch.woofs.filter(w => w <= el).pop(); ch.barkAt = lastWoof == null ? null : ch.t0 + lastWoof;
+      items.push({dep:q.X + q.Y + .04, f:() => { const g = P(q.X, q.Y, q.z), c = V.ctx; c.save(); c.globalAlpha = Math.max(0, alpha);
+        drawDog(c, g[0], g[1], V.k*DOG_SIZE, dir, now/1000, run);
+        const w = ch.barkAt == null ? 1e9 : now - ch.barkAt; if (w < 500){ const fs = Math.max(10, V.k*.24), tx = g[0] + dir*V.k*.3, ty = g[1] - V.k*.78 - w/500*V.k*.15;   // WOOF! over its head
+          c.font = `400 ${fs}px ${FONT.display}`; c.textAlign = "center"; c.textBaseline = "middle"; c.lineJoin = "round"; c.globalAlpha = Math.max(0, alpha)*(1 - w/500);
+          c.lineWidth = Math.max(3, fs*.28); c.strokeStyle = "#5a3418"; c.strokeText("WOOF!", tx, ty); c.fillStyle = "#ffffff"; c.fillText("WOOF!", tx, ty); }
+        c.restore(); }}); });
+  }
   function charPos(p, idx, now){
     const d = disp[p.id]; if (!d) return null;
+    if (d.chase && !d.path && !d.chase.done){ const c = chasePos(d, idx, now); if (c) return c; }
     if (d.path && now < d.t0){ const a = stand(d.path[0], idx); return {X:a[0], Y:a[1], z:tileTop(d.path[0], now), walking:false, tile:d.path[0]}; }   // waiting for the dice
     if (d.path){
       const el = now - d.t0, k = Math.floor(el / HOP);
-      if (k >= d.path.length - 1){ d.pos = d.path[d.path.length-1]; d.path = null; press(d.pos); playLanding(d.pos); }
+      if (k >= d.path.length - 1){ d.pos = d.path[d.path.length-1]; d.path = null; press(d.pos); playLanding(d.pos, p.id); }
       else {
         if (k > (d.hopsDone||0)){ d.hopsDone = k; sfx("hop"); press(d.path[k]); }
         const f = (el % HOP)/HOP, a = stand(d.path[k], idx), b = stand(d.path[k+1], idx);
@@ -534,18 +663,23 @@ const board = (() => {
     Object.keys(state.own).forEach(k => { const i = +k, st = state.own[i]; if (!st || TILES[i].type !== "beach") return; const owner = byId(state, st.o); const r = tileRect(i), a = along(r, .42), e = edgeDir(r.side);
       const pp = e === "X" ? [a[0] - .22, a[1]] : [a[0], a[1] - .22]; items.push({dep:pp[0] + pp[1], f:onTile(i, () => popResort(i, pp[0], pp[1], owner.color))}); });
     goneBuildings(items);
+    drawChaseDogs(items, now);
     const cur = state.players[state.turn];
     state.players.forEach((p, idx) => { if (p.bankrupt) return; const cp = charPos(p, idx, now); if (!cp) return;
       items.push({dep:cp.X + cp.Y + .05, f:() => { const b = P(cp.X, cp.Y, cp.z), h = V.k*1.05;
         const y0 = b[1] - (cp.walking ? Math.abs(Math.sin(now/70))*h*.04 : 0), opts = {facing:facingOn(cp.tile), t:now/1000 + idx*1.3, walking:cp.walking, ring:p.color};
-        /* Only the player whose turn it is shows at full strength. Everyone else is drawn on a side layer
-           and pasted at IDLE_ALPHA, so the whole figure fades evenly. */
-        if (p === cur || state.status === "over") drawTycoon(V.ctx, b[0], y0, h, p.look ?? idx, opts);
+        /* Only the player whose turn it is shows at full strength (and anyone running from the dog). Everyone else is drawn
+           on a side layer and pasted at IDLE_ALPHA, so the whole figure fades evenly. A player stranded on Lost Island
+           is greyed out (STUCK_ALPHA, no color) until they leave. */
+        const dd = disp[p.id], stuck = p.jail > 0 && state.status === "playing" && !cp.walking && !(dd && dd.chase && !dd.chase.done);
+        if ((p === cur || state.status === "over" || cp.chased) && !stuck) drawTycoon(V.ctx, b[0], y0, h, p.look ?? idx, opts);
         else {
           const dpr = Math.min(2, devicePixelRatio || 1), w = Math.ceil(h*1.4), ht = Math.ceil(h*1.3), lay = fadeLayer(idx, w*dpr, ht*dpr), lc = lay.getContext("2d");
           lc.setTransform(dpr, 0, 0, dpr, 0, 0); lc.clearRect(0, 0, w, ht); drawTycoon(lc, w/2, ht - h*.12, h, p.look ?? idx, opts);
-          V.ctx.globalAlpha = IDLE_ALPHA; V.ctx.drawImage(lay, b[0] - w/2, y0 - ht + h*.12, w, ht); V.ctx.globalAlpha = 1;
+          V.ctx.globalAlpha = stuck ? STUCK_ALPHA : IDLE_ALPHA; if (stuck) V.ctx.filter = "grayscale(1)";
+          V.ctx.drawImage(lay, b[0] - w/2, y0 - ht + h*.12, w, ht); V.ctx.globalAlpha = 1; V.ctx.filter = "none";
         }
+        if (cp.chased) sweatDrops(V.ctx, b[0], y0, h, now, cp.dir);   // running from the dog
         if (p === cur && !cp.walking) headPt = [b[0], b[1] - h*1.12];
         if (p === cur && (state.status === "playing" || state.status === "demo")){ const y = b[1] - h*1.12 - Math.abs(Math.sin(now/320))*V.k*.12, x = V.ctx, s = V.k*.14;
           x.fillStyle = p.color; x.beginPath(); x.moveTo(b[0], y + s*1.6); x.lineTo(b[0] - s, y); x.lineTo(b[0] - s*.55, y - s*.6); x.lineTo(b[0] + s*.55, y - s*.6); x.lineTo(b[0] + s, y); x.closePath(); x.fill();
@@ -827,7 +961,7 @@ const board = (() => {
     moneyFly(from, to, amt, dur){ if (from < 0 && to < 0) return; flights.push({from:from < 0 ? null : from, to:to < 0 ? null : to, amt, t0:performance.now() + 320, dur}); },
     /* Money still on its way for seat idx: + what it hasn't paid out yet, - what it hasn't received yet */
     cashPending,
-    holdMoney(fn){ moneyHold = fn; }, onClick(f){ clickCb = f; }, onIdle(f){ onBusyEnd = f; } };
+    holdMoney(fn){ moneyHold = fn; }, holdChase(fn){ chaseHold = fn; }, onClick(f){ clickCb = f; }, onIdle(f){ onBusyEnd = f; } };
 })();
 
 /* mini illustration for the build cards */

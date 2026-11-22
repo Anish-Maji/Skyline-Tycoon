@@ -77,7 +77,8 @@ function txn(s, fromId, toId, amt){ if (!(amt > 0)) return; s.txSeq = (s.txSeq |
 function setMove(s, p, kind, from, to){ s.moveSeq = (s.moveSeq||0) + 1; s.lastMove = {pid:p.id, kind, from, to, seq:s.moveSeq}; }
 function walk(s, p, n){ const from = p.pos, to = (from + n) % N; if (to < from) passStart(s, p); p.pos = to; setMove(s, p, "walk", from, to); }
 function jumpTo(s, p, to, viaStart){ const from = p.pos; if (viaStart && to < from) passStart(s, p); p.pos = to; setMove(s, p, "jump", from, to); }
-function sendJail(s, p){ const from = p.pos; p.pos = 8; p.jail = 1; p.flight = false; s.extra = false; setMove(s, p, "jump", from, 8); }
+/* kind "chase": the board shows the player chased round to Lost Island by a dog (only for show: no rent, no Start money) */
+function sendJail(s, p, kind){ const from = p.pos; p.pos = 8; p.jail = 1; p.flight = false; s.extra = false; setMove(s, p, kind || "jump", from, 8); }
 function bankrupt(s, p){
   p.bankrupt = true; p.cash = 0; p.flight = false; p.jail = 0;
   owned(s, p.id).forEach(i => { delete s.own[i]; });
@@ -140,7 +141,8 @@ function checkWin(s){
 function nextTurn(s){
   s.doubles = 0; s.extra = false; const n = s.players.length; let i = s.turn;
   for (let k = 0; k < n; k++){ i = (i + 1) % n; if (!s.players[i].bankrupt) break; }
-  if (i <= s.turn){ s.round = (s.round||1) + 1; endEvents(s); if (timeUp(s)) return endOnTime(s); }
+  const f = s.first || 0, rel = j => (j - f + n) % n;   // seats counted from whoever went first, so a round ends when play gets back to them
+  if (rel(i) <= rel(s.turn)){ s.round = (s.round||1) + 1; endEvents(s); if (timeUp(s)) return endOnTime(s); }
   s.turn = i; const p = s.players[i]; s.phase = p.flight ? "fly" : "roll"; s.pending = null;
 }
 /* Play time: once it runs out, the round in progress finishes and the richest tycoon (cash plus property) wins */
@@ -219,7 +221,7 @@ function drawCard(s, p){
     case "forward": walk(s, p, 4); return resolve(s, p);
     case "bonus": p.cash += 150; txn(s, null, p.id, 150); return finish(s);
     case "bday": s.players.forEach(o => { if (o !== p && !o.bankrupt) txn(s, o.id, p.id, pay(s, o, p, 30)); }); return finish(s);
-    case "jail": if (!shielded(s, p, "trip to Lost Island")) sendJail(s, p); return finish(s);
+    case "jail": if (!shielded(s, p, "trip to Lost Island")) sendJail(s, p, "chase"); return finish(s);
     case "quake":   // the drawer picks a rival city to wipe out (see the "quake" action)
       if (quakeOptions(s, p).length){ s.phase = "act"; s.pending = {k:"quake"}; return; }
       say(s, "The ground shook, but no rival city could fall."); return finish(s);

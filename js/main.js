@@ -27,7 +27,8 @@ function setState(s, opts){
     (s.txs || [s.tx]).filter(t => t && t.seq > app.lastTx).forEach(t => board.moneyFly(ix(t.from), ix(t.to), t.amt));
     app.lastTx = seq;
   }
-  if (s.status === "playing" && s.rollId === 0 && (!prev || prev.status !== "playing")) board.celebrate(s.festivals);
+  if (s.status === "playing" && s.rollId === 0 && (!prev || prev.status !== "playing" || (opts && opts.reset))){ board.celebrate(s.festivals);
+    if (Date.now() - (s.moveAt || 0) < 15000) showFirstCard(s); }   // a game that just started (not one reloaded later): show who goes first
   if (prev && !(opts && opts.reset) && s.expo != null && s.expo !== prev.expo) board.celebrate([s.expo], "GRAND EXPO!");   // the Expo's own flags go up   // a new game begins: festival flags pop up
   if (s.status === "playing" || s.status === "over"){
     if (prev && s.rollId !== app.lastRoll && app.lastRoll !== -1){ sfx("dice"); const d1 = $("d1"), d2 = $("d2"); d1.classList.remove("roll"); d2.classList.remove("roll"); void d1.offsetWidth; d1.classList.add("roll"); d2.classList.add("roll"); }
@@ -46,7 +47,27 @@ let cardT = null;
 const CARD_SHOW_MS = 4200, CARD_AFTER_MS = 350;   // how long the card stays, and the pause after the character lands
 /* True while a Chance card is waiting to show or is on screen. The next move waits for it. */
 let cardOpen = false;
-const cardBusy = () => cardOpen || bannerOpen || landingBusy();   // landingBusy: a landing sound with wait:true is still playing (audio.js)
+const cardBusy = () => cardOpen || bannerOpen || firstOpen || landingBusy();
+/* ---------- Who goes first ----------
+   When a game starts, a card in the starting player's color pops up with their character and name, with stars and
+   confetti around it. It stays FIRST_CARD_MS (or until tapped) and the first roll waits for it. */
+const FIRST_CARD_MS = 3200; let firstOpen = false, firstT = null;
+function showFirstCard(s){
+  const p = s.players[s.turn]; if (!p) return;
+  const el = $("firstCard"), card = $("fcCard"), pic = $("fcPic"), fx = $("fcFx"), B = innerWidth <= 640 ? 110 : 150;
+  card.style.setProperty("--pc", p.color);
+  pic.innerHTML = ""; pic.appendChild(tycoonArt.liveCanvas(B, B, (c, t) => drawTycoon(c, B/2, B/2 + B*1.3, B*1.6, p.look ?? s.turn, {facing:"right", t})));
+  $("fcName").textContent = app.mode === "online" && p.id === app.me ? "YOU" : p.name.toUpperCase();
+  /* stars and confetti dots around the card, each popping in a little after the card */
+  /* positions in % of the card from its middle: a big star and a small one at the top right, one at the bottom left */
+  const STARS = [[44, -44, 1.3, "#ffb21a"], [56, -20, .7, "#ffb21a"], [-50, 38, 1, "#ffb21a"]], DOTS = [[30, -54, "#ff5d8f"], [22, -46, "#4fc3f7"], [58, -40, "#8bd450"], [60, -6, "#4fc3f7"], [-58, 26, "#ff5d8f"], [-44, 22, "#4fc3f7"], [-38, 52, "#8bd450"], [-60, 48, "#ff5d8f"]];
+  fx.innerHTML = STARS.map(([x, y, sc, c], n) => `<svg class="fc-star" style="left:calc(50% + ${x}%);top:calc(50% + ${y}%);--s:${sc};--c:${c};animation-delay:${.25 + n*.12}s" viewBox="0 0 40 40"><path d="M20 2l5.3 11.6 12.7 1.4-9.5 8.6 2.7 12.5L20 29.8 8.8 36.1l2.7-12.5L2 15l12.7-1.4z"/></svg>`).join("")
+    + DOTS.map(([x, y, c], n) => `<i class="fc-dot" style="left:calc(50% + ${x}%);top:calc(50% + ${y}%);--c:${c};animation-delay:${.3 + n*.06}s"></i>`).join("");
+  firstOpen = true; el.hidden = false; el.classList.remove("show", "leaving"); void el.offsetWidth; el.classList.add("show"); sfx("card");
+  const close = () => { if (!firstOpen) return; clearTimeout(firstT); el.classList.add("leaving");
+    setTimeout(() => { el.hidden = true; el.classList.remove("show", "leaving"); pic.innerHTML = ""; firstOpen = false; render(); scheduleBot(); }, 320); };
+  el.onclick = close; clearTimeout(firstT); firstT = setTimeout(close, FIRST_CARD_MS);
+}   // landingBusy: a landing sound with wait:true is still playing (audio.js)
 /* ---------- Full set banner ----------
    When a player comes to own every city of a color, a wide band in that color sweeps across the board:
    FULL SET, who and which region, and that rent there is now doubled. It waits for the walk, the building pop,
@@ -85,6 +106,7 @@ function showCard(card, waited){
   clearTimeout(cardT); cardT = setTimeout(hideCard, CARD_SHOW_MS);
 }
 board.holdMoney(() => cardOpen);   // a Chance card goes first, then the cash stack
+board.holdChase(() => cardOpen);   // the Storm warning card first, then the dog chases the player to Lost Island
 function hideCard(){ clearTimeout(cardT); $("card").hidden = true; if (cardOpen){ cardOpen = false; render(); scheduleBot(); } }
 $("card").onclick = hideCard;
 
@@ -152,10 +174,11 @@ const TOMATO_FLY_MS = 700, SPLAT_MS = 2800, TOMATO_COOLDOWN_MS = 1500;
 let lastThrow = 0, fxSeen = 0, fxUnsub = null;
 /* who is throwing from this screen: online, me; offline, the player whose turn it is (or the first person if a bot is playing) */
 function throwerIdx(){ const s = app.s; if (!s || s.status !== "playing") return -1;
-  if (app.mode === "online") return app.readOnly ? -1 : s.players.findIndex(p => p.id === app.me && !p.bankrupt && !p.left);
-  if (app.mode === "offline"){ const cur = s.players[s.turn]; return !cur.bot ? s.turn : s.players.findIndex(p => !p.bot && !p.bankrupt); }
+  /* Everyone can throw and be hit, bankrupt players included: going broke doesn't take away the fun */
+  if (app.mode === "online") return app.readOnly ? -1 : s.players.findIndex(p => p.id === app.me && !p.left);
+  if (app.mode === "offline"){ const cur = s.players[s.turn]; return !cur.bot ? s.turn : s.players.findIndex(p => !p.bot); }
   return -1; }
-function canThrowAt(idx){ const me = throwerIdx(), t = app.s.players[idx]; return me >= 0 && idx !== me && t && !t.bankrupt; }
+function canThrowAt(idx){ const me = throwerIdx(), t = app.s.players[idx]; return me >= 0 && idx !== me && !!t; }
 function throwTomato(toIdx){
   const from = throwerIdx(); if (from < 0 || from === toIdx || Date.now() - lastThrow < TOMATO_COOLDOWN_MS) return; lastThrow = Date.now();
   playTomato(from, toIdx);
@@ -628,7 +651,9 @@ function startOffline(){
   st.seats.forEach((s, i) => { if (s.type === "off") return; const nm = (s.type === "human" ? s.name.trim() : s.name) || `Player ${i + 1}`; ps.push(mkPlayer("p" + i, nm, ps.length, s.type === "bot", s.look)); });
   if (ps.length < 2){ const L = freeLook(ps); ps.push(mkPlayer("p-bot", botName(ps, L), ps.length, true, L)); }
   if (!ps.some(p => !p.bot)) ps[0].bot = false;
-  closeQS(); stopOnline(); app.mode = "offline"; app.sel = -1; const s = newState(ps, {rules:st.rules}); say(s, "A new game begins. Good luck, tycoons.");
+  closeQS(); stopOnline(); app.mode = "offline"; app.sel = -1; const s = newState(ps, {rules:st.rules});
+  const first = Math.floor(Math.random()*ps.length); s.turn = first; s.first = first;   // a random player goes first, offline too
+  say(s, `A new game begins. ${ps[first].name} goes first. Good luck, tycoons.`);
   app.lastRoll = 0; app.lastCard = -1; app.lastOwnCount = 0; app.lastStatus = "playing"; closeSheet(); setState(s, {reset:true}); saveOffline();
 }
 
@@ -720,7 +745,10 @@ function renderPicker(m){
     $("copyCode").onclick = () => copy(m.code, "Code copied"); $("copyLink").onclick = () => copy(inviteText(m.code), "Invite copied");
   }
   if (m.canStart) $("startBtn").onclick = () => online ? lobbyEdit(st => { if (st.players.length < 2){ const L = freeLook(st.players); st.players.push(mkPlayer("bot-" + Math.random().toString(36).slice(2, 8), botName(st.players, L), st.players.length, true, L)); }
-    st.status = "playing"; st.phase = "roll"; st.turn = 0; startGame(st); say(st, "The game begins. Good luck, tycoons."); }).then(closeQS) : startOffline();
+    /* Online, a random player goes first (not always the host) */
+    const first = Math.floor(Math.random()*st.players.length);
+    st.status = "playing"; st.phase = "roll"; st.turn = first; st.first = first; startGame(st);
+    say(st, `The game begins. ${st.players[first].name} goes first. Good luck, tycoons.`); }).then(closeQS) : startOffline();
 }
 
 /* ---------- Quick settings (host only) ----------

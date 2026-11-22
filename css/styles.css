@@ -314,6 +314,29 @@ body{margin:0;background:var(--stage);color:var(--ink);font-family:var(--body);f
 .pick-timer.late{color:#ffd23f}
 
 /* Full set banner: a wide band in the region's color sweeps across the middle of the board (--sc region, --pc owner) */
+/* Who goes first: a card in the starter's color with their character, popping in with stars and confetti */
+.firstcard{position:absolute;inset:0;z-index:14;display:grid;place-items:center;background:rgba(10,18,26,.35);cursor:pointer}
+.firstcard[hidden]{display:none}
+.fc-card{--pc:#2f7fe0;position:relative;width:min(300px,78vw);padding:22px 22px 24px;border-radius:var(--radius-2xl);text-align:center;color:#fff;
+  background:linear-gradient(180deg,color-mix(in srgb,var(--pc) 82%,#fff),var(--pc));box-shadow:0 0 0 5px #fff,0 18px 40px rgba(0,0,0,.35)}
+.fc-pic{width:max-content;margin:0 auto 16px;padding:6px;border-radius:var(--radius-xl);background:#fff;box-shadow:0 4px 0 rgba(0,0,0,.15)}
+.fc-pic canvas{display:block;border-radius:var(--radius-lg);background:linear-gradient(180deg,color-mix(in srgb,var(--pc) 22%,#fff),color-mix(in srgb,var(--pc) 40%,#fff))}
+.fc-label{font-weight:800;font-size:14px;letter-spacing:.08em;opacity:.92}
+.fc-name{font-family:var(--display);font-size:clamp(26px,6vw,36px);line-height:1.05;margin-top:4px;text-shadow:0 3px 0 rgba(0,0,0,.2);overflow-wrap:anywhere}
+.fc-fx{position:absolute;inset:0;pointer-events:none}
+.fc-star{position:absolute;width:56px;height:56px;margin:-28px 0 0 -28px;fill:var(--c);stroke:#fff;stroke-width:2.5;stroke-linejoin:round;transform:scale(0);filter:drop-shadow(0 3px 0 rgba(0,0,0,.15))}
+.fc-dot{position:absolute;width:12px;height:12px;margin:-6px 0 0 -6px;border-radius:50%;background:var(--c);box-shadow:0 0 0 2.5px #fff;transform:scale(0)}
+.firstcard.show .fc-card{animation:fcIn .55s cubic-bezier(.2,1.5,.4,1) both}
+.firstcard.show .fc-star{animation:fcStar .5s cubic-bezier(.2,1.6,.4,1) both,fcSpin 3s .6s ease-in-out infinite alternate}
+.firstcard.show .fc-dot{animation:fcPop .4s cubic-bezier(.2,1.6,.4,1) both}
+.firstcard.show .fc-name{animation:sbPunch .45s .3s cubic-bezier(.2,1.6,.4,1) both}
+.firstcard.leaving{animation:fcOut .32s ease-in both}
+@keyframes fcIn{from{transform:scale(.3) rotate(-8deg);opacity:0}to{transform:none;opacity:1}}
+@keyframes fcStar{from{transform:scale(0) rotate(-90deg)}to{transform:scale(var(--s)) rotate(0)}}
+@keyframes fcSpin{from{transform:scale(var(--s)) rotate(0)}to{transform:scale(var(--s)) rotate(14deg)}}
+@keyframes fcPop{from{transform:scale(0)}to{transform:scale(1)}}
+@keyframes fcOut{to{opacity:0;transform:scale(.92)}}
+@media (prefers-reduced-motion:reduce){.firstcard.show .fc-card,.firstcard.show .fc-name,.firstcard.show .fc-dot,.firstcard.leaving{animation:none}.firstcard.show .fc-star{animation:none;transform:scale(var(--s))}.firstcard.show .fc-dot{transform:scale(1)}}
 .setbanner{position:absolute;inset:0;z-index:13;display:grid;place-items:center;pointer-events:none;overflow:hidden}
 .sb-band{width:100%;padding:34px 16px 30px;text-align:center;color:#fff;
   background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--sc) 88%,#000) 16%,var(--sc) 50%,color-mix(in srgb,var(--sc) 88%,#000) 84%,transparent);

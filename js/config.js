@@ -147,11 +147,24 @@ const ASSETS = {
 /* Background music: a sound file that loops while the Music button is on. Volume is 0 to 1.
    Set src to null to go back to the music generated in code (js/audio.js). */
 const MUSIC = {src:"assets/sounds/music.mp3", volume:.45};
+/* Sound effects played from a file instead of the sound made in code (audio.js). Remove a line to go back to the code sound. */
+const SOUND_FILES = {
+  dice: {src:"assets/sounds/dice.mp3", volume:.9},     // the dice being thrown
+  /* the dog chasing a player to Lost Island (render.js fits them to the run: DOG_BARKS) */
+  dog1: {src:"assets/sounds/dog-1.mp3", volume:.85},   // a run of barks, about 2 s
+  dog2: {src:"assets/sounds/dog-2.mp3", volume:.85},   // one woof
+  dog3: {src:"assets/sounds/dog-3.mp3", volume:.85}    // one woof
+};
 /* Sounds that play when a character lands on a tile, by tile index. Respects the Sound button.
    Volume is 0 to 1. Add more tiles the same way, e.g. 24: {src:"assets/sounds/jet.mp3", volume:.8}.
-   wait:true holds the next move (buttons and bots) until the sound has finished playing. */
+   wait:true holds every next move (buttons and bots) until the sound has finished playing.
+   wait:"next" lets the player who landed carry on (buy, build, roll again), but the next player waits for it to finish. */
 const LANDING_SOUNDS = {
   8: {src:"assets/sounds/lost-island.mp3", volume:.8, wait:true}   // Lost Island: the next turn waits for it
+};
+/* The same, for every tile of a type (a tile's own line in LANDING_SOUNDS wins) */
+const LANDING_SOUNDS_BY_TYPE = {
+  beach: {src:"assets/sounds/beach.mp3", volume:.85, wait:"next"}   // any beach: the lander can buy meanwhile, the next player waits
 };
 /* Heights on the board, in tile units, used when an image replaces a drawing. */
 const ASSET_HEIGHTS = { characters: 1.05, buildings: {1:.7, 2:.75, 3:.8, 4:.95, 5:1.6}, props: {pine:1.0, palm:1.1, money:.9} };

@@ -64,26 +64,41 @@ function setMusic(on){
     audio.bus.gain.cancelScheduledValues(audio.ctx.currentTime); audio.bus.gain.setTargetAtTime(Math.max(.0001, audio.vol), audio.ctx.currentTime, .4); }
   else if (audio.ctx){ audio.bus.gain.setTargetAtTime(.0001, audio.ctx.currentTime, .2); setTimeout(() => { if (!audio.music) clearInterval(audio.timer); }, 800); }
 }
-/* Sound files from LANDING_SOUNDS. Each file is loaded once and restarted if it plays again. */
+/* Sound files from LANDING_SOUNDS (or LANDING_SOUNDS_BY_TYPE). Each file is loaded once and restarted if it plays again. */
 const clips = {};
-/* A sound with wait:true keeps landingBusy() true until it ends (at most LANDING_WAIT_MAX_MS), so the next move waits for it */
+/* A sound with wait keeps landingBusy() true until it ends (at most LANDING_WAIT_MAX_MS), so the next move waits for it.
+   wait:true holds everyone. wait:"next" (landingOwner set) only holds once the turn has moved on from the player who landed,
+   so they can still buy, build or roll their doubles again while it plays. */
 const LANDING_WAIT_MAX_MS = 15000;
-let landingUntil = 0;
-const landingBusy = () => Date.now() < landingUntil;
-function landingDone(){ if (!landingUntil) return; landingUntil = 0; if (typeof render === "function") render(); }
-function playLanding(tile){
-  const L = LANDING_SOUNDS[tile]; if (!L || !audio.sfx) return;
+let landingUntil = 0, landingOwner = null;
+const landingBusy = () => {
+  if (Date.now() >= landingUntil) return false; if (landingOwner == null) return true;
+  const s = typeof app !== "undefined" && app.s, cur = s && s.players && s.players[s.turn]; return !cur || cur.id !== landingOwner;
+};
+function landingDone(){ if (!landingUntil) return; landingUntil = 0; landingOwner = null; if (typeof render === "function") render(); if (typeof scheduleBot === "function") scheduleBot(); }
+function landingSound(tile){ return LANDING_SOUNDS[tile] || (typeof TILES !== "undefined" && TILES[tile] && LANDING_SOUNDS_BY_TYPE[TILES[tile].type]) || null; }
+/* pid: who landed (for wait:"next") */
+function playLanding(tile, pid){
+  const L = landingSound(tile); if (!L || !audio.sfx) return;
   try{
-    let a = clips[tile]; if (!a){ a = clips[tile] = new Audio(L.src); a.preload = "auto";
+    let a = clips[L.src]; if (!a){ a = clips[L.src] = new Audio(L.src); a.preload = "auto";
       a.onerror = () => { console.warn("Sound not found:", L.src); if (L.wait) landingDone(); };
-      if (L.wait){ a.addEventListener("ended", landingDone); a.addEventListener("loadedmetadata", () => { if (landingBusy()) landingUntil = Date.now() + Math.min(LANDING_WAIT_MAX_MS, (a.duration - a.currentTime)*1000 + 150); }); } }
+      if (L.wait){ a.addEventListener("ended", landingDone); a.addEventListener("loadedmetadata", () => { if (Date.now() < landingUntil) landingUntil = Date.now() + Math.min(LANDING_WAIT_MAX_MS, (a.duration - a.currentTime)*1000 + 150); }); } }
     a.volume = L.volume ?? 1; a.currentTime = 0;
-    if (L.wait) landingUntil = Date.now() + Math.min(LANDING_WAIT_MAX_MS, ((a.duration || 6)*1000) + 150);
+    if (L.wait){ landingOwner = L.wait === "next" ? (pid ?? null) : null; landingUntil = Date.now() + Math.min(LANDING_WAIT_MAX_MS, ((a.duration || 6)*1000) + 150); }
     const p = a.play(); if (p && p.catch) p.catch(() => { if (L.wait) landingDone(); });   // could not play (no tap yet): don't hold the game
   }catch(e){ landingDone(); }
 }
+/* Sound effects from files (SOUND_FILES in config.js), loaded once up front. If a file is missing, the code sound plays instead. */
+const fileFx = {};
+Object.entries(SOUND_FILES).forEach(([kind, F]) => { const a = new Audio(F.src); a.preload = "auto"; a.onerror = () => { console.warn("Sound not found:", F.src); a.failed = true; }; fileFx[kind] = a; });
+function playFileFx(kind){
+  const a = fileFx[kind]; if (!a || a.failed) return false;
+  try{ a.volume = SOUND_FILES[kind].volume ?? 1; a.currentTime = 0; const p = a.play(); if (p && p.catch) p.catch(() => {}); return true; }catch(e){ return false; }
+}
 function sfx(kind){
-  if (!audio.sfx || !audio.ctx) return; const t = audio.ctx.currentTime, d = audio.fx;
+  if (!audio.sfx) return; if (playFileFx(kind)) return;
+  if (!audio.ctx) return; const t = audio.ctx.currentTime, d = audio.fx;
   if (kind === "dice"){ for (let i = 0; i < 5; i++) hiss(t + i*.055, .04, .25, d, 2500); tone(180, t + .3, .08, "square", .05, d, 900); }
   else if (kind === "hop") tone(520 + Math.random()*80, t, .07, "sine", .06, d);
   else if (kind === "buy"){ [72,76,79,84].forEach((m, i) => tone(mtof(m), t + i*.07, .25, "triangle", .09, d)); }
@@ -96,5 +111,7 @@ function sfx(kind){
   else if (kind === "splat"){ hiss(t, .18, .22, d, 900); tone(110, t, .12, "sine", .12, d); tone(70, t + .03, .16, "triangle", .08, d); }
   else if (kind === "build"){ [0, .2, .42, .62].forEach((dt, i) => { tone(140 + i*30, t + dt, .07, "triangle", .1, d); hiss(t + dt, .04, .06, d, 2200); }); tone(mtof(79), t + .95, .25, "triangle", .07, d); }
   else if (kind === "unbuild"){ [0, .14, .3].forEach((dt, i) => { tone(320 - i*60, t + dt, .06, "triangle", .08, d); hiss(t + dt, .05, .07, d, 3200); }); hiss(t + .35, .4, .09, d, 1100); }   // pieces lifting off, then a puff of dust
+  /* two quick woofs; also stands in for the dog sound files (dog1 to dog3) if they are missing */
+  else if (kind === "bark" || /^dog\d/.test(kind)){ [0, .16].forEach(dt => { tone(520, t + dt, .07, "sawtooth", .06, d, 1600); tone(300, t + dt + .02, .09, "square", .05, d, 1100); hiss(t + dt, .05, .08, d, 2400); }); }   // two quick woofs
   else if (kind === "win"){ [60,64,67,72,76,79,84].forEach((m, i) => tone(mtof(m), t + i*.09, .5, "triangle", .1, d)); }
 }

@@ -1,7 +1,16 @@
 "use strict";
 /* ================= RULES ENGINE ================= */
 const clone = o => JSON.parse(JSON.stringify(o));
-const rnd6 = () => 1 + Math.floor(Math.random()*6);
+/* One die, 1 to 6. Uses the browser's cryptographic randomness (the same source used for passwords and keys).
+   A random byte is 0 to 255; bytes 252 and up are thrown away and redrawn, so each face gets exactly 42 of the 252
+   values and no face is favoured. Falls back to Math.random only where crypto is missing. */
+const DICE_BYTE = new Uint8Array(1);
+function rnd6(){
+  const c = typeof crypto !== "undefined" && crypto.getRandomValues ? crypto : null;
+  if (!c) return 1 + Math.floor(Math.random()*6);
+  do { c.getRandomValues(DICE_BYTE); } while (DICE_BYTE[0] >= 252);
+  return 1 + DICE_BYTE[0] % 6;
+}
 /* This game's Quick settings, with defaults filled in */
 function rules(s){ return Object.assign({}, DEFAULT_SETTINGS, s && s.rules); }
 function money(n){ n = Math.round(n); const neg = n < 0; n = Math.abs(n);

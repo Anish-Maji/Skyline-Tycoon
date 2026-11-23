@@ -664,7 +664,11 @@ const board = (() => {
       const pp = e === "X" ? [a[0] - .22, a[1]] : [a[0], a[1] - .22]; items.push({dep:pp[0] + pp[1], f:onTile(i, () => popResort(i, pp[0], pp[1], owner.color))}); });
     goneBuildings(items);
     drawChaseDogs(items, now);
-    const cur = state.players[state.turn];
+    /* Who the board shows as the active player. The engine moves the turn on as soon as a move is decided (rent paid,
+       nothing to buy), while the dice, the walk and the cash stack are still playing. Until they finish, the player who
+       rolled stays at full strength with the arrow over their head; only then does the next player light up. */
+    const roller = state.roller && state.players.find(p => p.id === state.roller && !p.bankrupt);
+    const cur = roller && roller !== state.players[state.turn] && busy() ? roller : state.players[state.turn];
     state.players.forEach((p, idx) => { if (p.bankrupt) return; const cp = charPos(p, idx, now); if (!cp) return;
       items.push({dep:cp.X + cp.Y + .05, f:() => { const b = P(cp.X, cp.Y, cp.z), h = V.k*1.05;
         const y0 = b[1] - (cp.walking ? Math.abs(Math.sin(now/70))*h*.04 : 0), opts = {facing:facingOn(cp.tile), t:now/1000 + idx*1.3, walking:cp.walking, ring:p.color};

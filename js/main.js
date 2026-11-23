@@ -35,6 +35,13 @@ function setState(s, opts){
     const oc = Object.keys(s.own).length; if (prev && oc > app.lastOwnCount) sfx("buy");
     if (prev && !(opts && opts.reset)) newFullSets(prev, s).forEach(b => bannerQ.push(b));
     if (s.card && s.card.seq !== app.lastCard){ app.lastCard = s.card.seq; showCard(Object.assign({}, s.card)); }
+    /* "Not enough money" moments that don't wait for anyone (engine poorAlert): the band for every player */
+    if (!prev || (opts && opts.reset)) app.lastAlert = s.alert ? s.alert.seq : null;
+    else if (s.alert && s.alert.seq !== app.lastAlert){ app.lastAlert = s.alert.seq; const a = s.alert; alertQ.push(poorText(s, a.pid, a.k, a.tile, a.why)); }
+    /* "Nothing to build here" notes (engine noBuildNotice), only for the player they are about, once the walk is over */
+    if (!prev || (opts && opts.reset)) app.lastNotice = s.notice ? s.notice.seq : null;   // a game loaded or started: old notes stay quiet
+    else if (s.notice && s.notice.seq !== app.lastNotice){ app.lastNotice = s.notice.seq;
+      const who = byId(s, s.notice.pid), mine = app.mode === "online" ? s.notice.pid === app.me : who && !who.bot; if (mine) noticeQ.push(s.notice.msg); }
     if (prev && s.status === "over" && app.lastStatus !== "over") sfx("win");
     app.lastOwnCount = oc; app.lastRoll = s.rollId; app.lastStatus = s.status;
   }
@@ -47,7 +54,7 @@ let cardT = null;
 const CARD_SHOW_MS = 4200, CARD_AFTER_MS = 350;   // how long the card stays, and the pause after the character lands
 /* True while a Chance card is waiting to show or is on screen. The next move waits for it. */
 let cardOpen = false;
-const cardBusy = () => cardOpen || bannerOpen || firstOpen || landingBusy();
+const cardBusy = () => cardOpen || bannerOpen || firstOpen || landingBusy() || Date.now() < poorUI.until || alertQ.length > 0;   // and the "not enough money" band
 /* ---------- Who goes first ----------
    When a game starts, a card in the starting player's color pops up with their character and name, with stars and
    confetti around it. It stays FIRST_CARD_MS (or until tapped) and the first roll waits for it. */
@@ -74,6 +81,8 @@ function showFirstCard(s){
    the cash stack and any Chance card, stays SET_BANNER_MS, and the next move waits for it. */
 const SET_BANNER_MS = 2800;
 const bannerQ = []; let bannerOpen = false;
+const noticeQ = [];   // short notes for you (e.g. why nothing can be built), shown as a toast when the board is still
+setInterval(() => { if (noticeQ.length && !board.busy() && !cardOpen && !bannerOpen) toast(noticeQ.shift()); }, 200);
 function fullSets(s){ const out = {}; REGIONS.forEach(r => { const tiles = TILES.map((t, i) => t.g === r.id ? i : -1).filter(i => i >= 0);
   const o = s.own[tiles[0]] && s.own[tiles[0]].o; if (o && tiles.every(i => s.own[i] && s.own[i].o === o)) out[r.id] = o; }); return out; }
 function newFullSets(prev, s){ const a = fullSets(prev), b = fullSets(s); return Object.keys(b).filter(g => a[g] !== b[g]).map(g => ({g, pid:b[g]})); }
@@ -112,12 +121,19 @@ $("card").onclick = hideCard;
 
 /* " · auto move in 12s" when an online player is about to run out of time */
 function turnClock(s){ if (app.mode !== "online" || s.status !== "playing" || chancePickMs(s)) return ""; const left = idleLeft(s); return left != null && left < 15000 ? ` · auto move in ${Math.max(0, Math.ceil(left/1000))}s` : ""; }
-setInterval(() => { if (app.mode === "online" && app.s && app.s.status === "playing") { const s = app.s, cur = s.players[s.turn]; $("turnline").textContent = `${cur.name}'s turn${cur.jail ? " · on Lost Island" : ""}${turnClock(s)}`; } }, 1000);
+/* Whose turn the screen shows. The engine passes the turn on as soon as a move is decided, but while that move is still
+   playing out on the board (dice, walk, cash stack, building) the player who rolled stays highlighted. Same rule as the board. */
+function shownTurn(s){
+  const i = s.roller ? s.players.findIndex(p => p.id === s.roller && !p.bankrupt) : -1;
+  return i >= 0 && i !== s.turn && s.status === "playing" && board.busy() ? i : s.turn;
+}
+function turnText(s){ const p = s.players[shownTurn(s)]; return `${p.name}'s turn${p.jail && shownTurn(s) === s.turn ? " · on Lost Island" : ""}${shownTurn(s) === s.turn ? turnClock(s) : ""}`; }
+setInterval(() => { if (app.mode === "online" && app.s && app.s.status === "playing") $("turnline").textContent = turnText(app.s); }, 1000);
 function render(){
   const s = app.s; if (!s) return;
   setDie($("d1"), s.dice[0]); setDie($("d2"), s.dice[1]); $("d1").parentNode.setAttribute("aria-label", `Dice: ${s.dice[0]} and ${s.dice[1]}`);
   const cur = s.players[s.turn];
-  $("turnline").textContent = s.status === "demo" ? "Demo board" : s.status === "over" ? "Game over" : s.status === "lobby" ? "Waiting in lobby" : `${cur.name}'s turn${cur.jail ? " · on Lost Island" : ""}${turnClock(s)}`;
+  $("turnline").textContent = s.status === "demo" ? "Demo board" : s.status === "over" ? "Game over" : s.status === "lobby" ? "Waiting in lobby" : turnText(s);
   renderPlayers(); renderActions(); syncPopup(); board.think(thinkingText(s));
   $("roomChip").hidden = app.mode !== "online"; if (app.mode === "online") $("roomChip").textContent = "Room " + app.code;
   if (s.status === "over" && app.mode) showOver();
@@ -136,7 +152,7 @@ function renderPlayers(){
   const s = app.s, box = $("players"); box.innerHTML = "";
   s.players.forEach((p, idx) => {
     const corner = CORNERS[idx % 4], d = document.createElement("div");
-    d.className = `cp ${corner}` + (idx === s.turn && s.status === "playing" ? " turn" : "") + (p.bankrupt ? " out" : ""); d.style.setProperty("--pc", p.color);
+    d.className = `cp ${corner}` + (idx === shownTurn(s) && s.status === "playing" ? " turn" : "") + (p.bankrupt ? " out" : ""); d.style.setProperty("--pc", p.color);
     const tag = p.bot ? "Bot" : (app.mode === "online" && p.id === app.me ? "You" : "");
     const props = owned(s, p.id).length;
     const av = document.createElement("div"); av.className = "cp-av";
@@ -314,7 +330,7 @@ function debtId(s){ const d = s.pending; return [s.turn, d.amt, d.why, s.moveSeq
 function showDebt(s, p){
   const d = s.pending, id = debtId(s), now = performance.now();
   if (debtUI.id !== id){ debtUI.id = id; debtUI.sel = new Set(); debtUI.until = now + 1900;
-    showAlert(`YOU DON'T HAVE ENOUGH MONEY TO ${(DEBT_TEXT[d.why] || "pay").toUpperCase()}`, 1900); }
+    showAlert(poorText(s, p.id, "debt", null, d.why), 1900); }
   const mine = owned(s, p.id); debtUI.sel.forEach(i => { if (!mine.includes(i)) debtUI.sel.delete(i); });
   clearTimeout(debtUI.timer);
   if (now < debtUI.until){ debtUI.timer = setTimeout(render, debtUI.until - now + 20); return; }
@@ -359,11 +375,33 @@ const ALERT_MS = 1900;
 const poorUI = {key:null, until:0, timer:null};
 function showAlert(text, ms, then){
   const b = $("alertBand"); $("alertText").textContent = text; b.hidden = false; b.classList.remove("show"); void b.offsetWidth; b.classList.add("show"); sfx("crash");
-  poorUI.until = Date.now() + ms; clearTimeout(poorUI.timer); poorUI.timer = setTimeout(() => { b.hidden = true; if (then) then(); }, ms);
+  poorUI.until = Date.now() + ms; clearTimeout(poorUI.timer); poorUI.timer = setTimeout(() => { b.hidden = true; if (then) then(); render(); scheduleBot(); }, ms);
 }
+/* The band's words: "YOU DON'T ..." for yourself, "RIYA DOESN'T ..." for anyone else (and on a shared screen with
+   several people, always the name), so every player sees what happened to whom. */
+function isYou(s, p){ return app.mode === "online" ? p.id === app.me : !p.bot && s.players.filter(q => !q.bot).length === 1; }
+function poorText(s, pid, k, tile, why){
+  const p = byId(s, pid) || {name:"Someone"}, subj = isYou(s, p) ? "YOU DON'T" : `${p.name.toUpperCase()} DOESN'T`;
+  if (k === "pay" || k === "debt") return `${subj} HAVE ENOUGH MONEY TO ${(DEBT_TEXT[why] || "pay").toUpperCase()}`;
+  const t = TILES[tile] || {}; return `${subj} HAVE ENOUGH MONEY TO ${k === "takeover" ? "BUY OUT" : "BUY"} THIS ${t.type === "beach" ? "BEACH" : "CITY"}`;
+}
+/* Everyone else watching: the same band, with the name, while that player's turn moves on (or they sell). Once per moment. */
+const watchUI = {key:null};
+function watchPoor(s, p){
+  if (!p || s.phase !== "act" || !s.pending || canControl(p) || board.busy()) return;
+  const k = s.pending.k; let key = null, text = null;
+  if (k === "buy" || k === "takeover"){ const t = TILES[s.pending.tile], need = k === "takeover" ? s.pending.cost : t.price;
+    if (need > p.cash){ key = s.rev + ":" + k; text = poorText(s, p.id, k, s.pending.tile); } }
+  else if (k === "debt"){ key = "debt:" + debtId(s); text = poorText(s, p.id, "debt", null, s.pending.why); }
+  if (key && watchUI.key !== key && Date.now() > poorUI.until){ watchUI.key = key; showAlert(text, ALERT_MS); }
+}
+/* Not-enough-money moments that don't wait for anyone (bots, automatic sales): the engine's s.alert, shown to all */
+const alertQ = [];
+setInterval(() => { if (alertQ.length && !board.busy() && !cardOpen && !bannerOpen && Date.now() > poorUI.until) showAlert(alertQ.shift(), ALERT_MS); }, 200);
 function syncPopup(){
   const s = app.s, m = $("bmodal"); if (m.classList.contains("leaving")) return;
   const p = s && s.status === "playing" ? s.players[s.turn] : null;
+  watchPoor(s, p);
   const ok = p && canControl(p) && s.phase === "act" && s.pending && ["buy","upgrade","takeover"].includes(s.pending.k) && !board.busy() && !app.writing;
   if (!ok){ m.hidden = true; app.popKey = null; return; }
   const key = s.rev + ":" + s.pending.k;
@@ -373,7 +411,7 @@ function syncPopup(){
   const k = s.pending.k, t = TILES[s.pending.tile], need = k === "takeover" ? s.pending.cost : k === "buy" ? t.price : 0;
   if (need > p.cash && poorUI.key !== key){ poorUI.key = key;
     const after = () => { const c = app.s; if (c && c.rev + ":" + (c.pending && c.pending.k) === key) dispatch({t:"skip"}); };
-    showAlert(`YOU DON'T HAVE ENOUGH MONEY TO ${k === "takeover" ? "BUY OUT" : "BUY"} THIS ${t.type === "beach" ? "BEACH" : "CITY"}`, ALERT_MS, after); return; }
+    showAlert(poorText(s, p.id, k, s.pending.tile), ALERT_MS, after); return; }
   if (poorUI.key === key && poorUI.until > Date.now()) return;
   app.popKey = key; buildPopup(s, p); m.hidden = false; setTimeout(() => $("bbuy").focus(), 30);
 }

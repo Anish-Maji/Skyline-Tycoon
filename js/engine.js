@@ -106,12 +106,18 @@ function pay(s, from, to, amt){
    bankrupt. "after" says what happens once it's paid: finish the turn, or walk on (after the boat). Bots sell automatically. */
 /* Payments to the bank that get the cash stack animation, like a purchase */
 const BANK_ANIM = {tax:true, fine:true};
+/* "Not enough money" moments that don't pause the game for a choice (a bot that can't buy, anyone short on a payment who
+   sells automatically or goes broke). main.js shows them to every player as the blue band, with the player's name.
+   k is "buy", "takeover" or "pay" (why says what for). The ones that wait for a person (pending buy, takeover or debt)
+   are shown from s.pending instead. */
+function poorAlert(s, p, k, tile, why){ s.alertSeq = (s.alertSeq || 0) + 1; s.alert = {seq:s.alertSeq, pid:p.id, k, tile, why}; }
 function charge(s, p, to, amt, why, msg, after){
   if (amt <= 0) return true;
   if (p.cash < amt && !p.bot && s.players[s.turn] === p && owned(s, p.id).length){
     s.phase = "act"; s.pending = {k:"debt", amt, to:to ? to.id : null, why, msg, after:after || {k:"finish"}};
     say(s, `${p.name} needs ${money(amt)} but only has ${money(p.cash)}.`); return false;
   }
+  if (p.cash < amt) poorAlert(s, p, "pay", null, why);   // short: sells automatically (or goes broke) below
   say(s, msg); const got = pay(s, p, to, amt); if (to || BANK_ANIM[why]) txn(s, p.id, to ? to.id : null, got); return true;
 }
 /* Pays the debt once there is enough cash, then carries on with the turn. Returns false if still short. */
@@ -182,8 +188,18 @@ function finish(s){
   nextTurn(s);
 }
 function offerUpgradeOrFinish(s, p, i){
-  if (TILES[i].type === "city" && upgradeOptions(s, p, i).length){ s.phase = "act"; s.pending = {k:"upgrade", tile:i}; }
-  else finish(s);
+  if (TILES[i].type === "city" && upgradeOptions(s, p, i).length){ s.phase = "act"; s.pending = {k:"upgrade", tile:i}; return; }
+  if (TILES[i].type === "city") noBuildNotice(s, p, i);
+  finish(s);
+}
+/* Landing on your own city with nothing to build: say why, so it doesn't look like the build card went missing.
+   s.notice is shown as a toast to that player (main.js) once the walk is over. */
+function noBuildNotice(s, p, i){
+  const t = TILES[i], st = s.own[i]; if (!st) return; let you, log;
+  if (st.l >= 5){ you = `${t.name} is already a Hotel.`; log = `${p.name}'s ${t.name} is already a Hotel.`; }
+  else if (buildCap(p) <= st.l){ const next = LEVEL_NAMES[st.l + 1]; you = `${next} in ${t.name} unlocks after your first lap.`; log = `${p.name} can't build ${next} in ${t.name} before finishing the first lap.`; }
+  else { you = `Not enough money to build in ${t.name}.`; log = `${p.name} can't afford to build in ${t.name}.`; }
+  say(s, log); s.noticeSeq = (s.noticeSeq || 0) + 1; s.notice = {pid:p.id, msg:you, seq:s.noticeSeq};
 }
 /* ---------- Chance cards ---------- */
 const pickOne = a => a[Math.floor(Math.random()*a.length)];
@@ -260,7 +276,7 @@ function resolve(s, p){
     if (!st){
       /* People always see the buy popup, even when they can not afford it (then everything in it is locked). Bots just move on. */
       if (p.cash >= t.price || !p.bot){ s.phase = "act"; s.pending = {k:"buy", tile:i}; return; }
-      say(s, `${p.name} can't afford ${t.name} yet.`); return finish(s);
+      poorAlert(s, p, "buy", i); say(s, `${p.name} can't afford ${t.name} yet.`); return finish(s);
     }
     if (st.o === p.id) return offerUpgradeOrFinish(s, p, i);
     const owner = byId(s, st.o), stuck = owner.jail > 0 && !rules(s).islandRent, r = stuck ? 0 : rentOf(s, i);
@@ -273,6 +289,7 @@ function resolve(s, p){
     if (s.own[i] && t.type === "city" && s.own[i].l < 5){
       const c = 2 * tileValue(i, s.own[i]);
       if (p.cash >= c || !p.bot){ s.phase = "act"; s.pending = {k:"takeover", tile:i, cost:c}; return; }
+      poorAlert(s, p, "takeover", i);   // a bot that can't afford the buyout
     }
     return finish(s);
   }

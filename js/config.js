@@ -147,6 +147,12 @@ const ASSETS = {
 /* Background music: a sound file that loops while the Music button is on. Volume is 0 to 1.
    Set src to null to go back to the music generated in code (js/audio.js). */
 const MUSIC = {src:"assets/sounds/music.mp3", volume:.45};
+/* Camera relay (TURN), for players whose network blocks direct video between browsers (common on mobile data and
+   hotspots). Cameras try a direct connection first and only use the relay when that fails. Fill in ONE of these:
+   - credentialsUrl: a link that returns the relay's login as a JSON list (Metered.ca gives one, ending in ?apiKey=...)
+   - iceServers: the relay's address and login typed in directly, e.g. [{urls:"turn:...:443?transport=tcp", username:"...", credential:"..."}]
+   Leave both empty to use direct connections only. */
+const CAMERA_RELAY = {credentialsUrl:"", iceServers:[]};
 /* Sound effects played from a file instead of the sound made in code (audio.js). Remove a line to go back to the code sound. */
 const SOUND_FILES = {
   dice: {src:"assets/sounds/dice.mp3", volume:.9},     // the dice being thrown

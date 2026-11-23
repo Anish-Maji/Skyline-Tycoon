@@ -61,9 +61,19 @@ const cams = (() => {
   const iOffer = other => short(me) < short(other);
   function gather(pc){ return new Promise(ok => { if (pc.iceGatheringState === "complete") return ok(); const t = setTimeout(ok, CAM.gatherMs);
     pc.addEventListener("icegatheringstatechange", () => { if (pc.iceGatheringState === "complete"){ clearTimeout(t); ok(); } }); }); }
+  /* The relay's login (CAMERA_RELAY in config.js), fetched once. Until it arrives (or if it fails) only STUN is used. */
+  let relay = null;
+  const relayReady = (async () => {
+    const R = typeof CAMERA_RELAY === "object" && CAMERA_RELAY ? CAMERA_RELAY : {};
+    try{
+      if (R.credentialsUrl){ const r = await fetch(R.credentialsUrl); if (r.ok){ const j = await r.json(); relay = Array.isArray(j) ? j : j.iceServers || null; } }
+      else if (Array.isArray(R.iceServers) && R.iceServers.length) relay = R.iceServers;
+    }catch(e){ console.warn("Camera relay unavailable:", e); }
+  })();
+  const iceServers = () => CAM.ice.concat(relay || []);
   function newPc(other){
     const pr = peers[other]; if (pr.pc) try { pr.pc.close(); } catch(e){}
-    const pc = new RTCPeerConnection({iceServers:CAM.ice}); pr.pc = pc; pr.state = "connecting"; pr.chan = null;
+    const pc = new RTCPeerConnection({iceServers:iceServers()}); pr.pc = pc; pr.state = "connecting"; pr.chan = null;
     if (remote[other]) remote[other].on = false;
     pc.ontrack = e => { const st = e.streams && e.streams[0] ? e.streams[0] : new MediaStream([e.track]); remote[other] = Object.assign(remote[other] || {}, {stream:st});
       const v = videoFor(other); v.srcObject = st; v.play().catch(() => {}); refresh(); };
@@ -83,40 +93,60 @@ const cams = (() => {
   }
   function tellCamState(other){ const ch = peers[other] && peers[other].chan; if (ch && ch.readyState === "open") try { ch.send(local ? "on" : "off"); } catch(e){} }
   async function makeOffer(other){
-    const pr = peers[other]; if (!pr || !room) return; const pc = newPc(other);
+    await relayReady; const pr = peers[other]; if (!pr || !room) return; const pc = newPc(other);
     pr.sender = pc.addTransceiver("video", {direction:"sendrecv"}).sender;
     useChannel(other, pc.createDataChannel("cam"));
     if (local) await pr.sender.replaceTrack(local.getVideoTracks()[0]).catch(() => {});
     await pc.setLocalDescription(await pc.createOffer()); await gather(pc);
     if (pr.pc !== pc) return; pr.offerTs = Date.now();
-    app.db.doc(docId(me, other, "o")).set({ts:pr.offerTs, sdp:pc.localDescription.sdp}).catch(() => {});
+    note(other, "offer sent"); app.db.doc(docId(me, other, "o")).set({ts:pr.offerTs, sdp:pc.localDescription.sdp}).catch(e => note(other, "offer write failed: " + (e && e.message)));
   }
   async function answer(other, offer){
-    const pr = peers[other]; if (!pr || !room) return; const pc = newPc(other);
+    await relayReady; const pr = peers[other]; if (!pr || !room) return; const pc = newPc(other);
     await pc.setRemoteDescription({type:"offer", sdp:offer.sdp});
     const tr = pc.getTransceivers().find(t => t.receiver.track && t.receiver.track.kind === "video") || pc.getTransceivers()[0];
     if (tr){ tr.direction = "sendrecv"; pr.sender = tr.sender; if (local) await pr.sender.replaceTrack(local.getVideoTracks()[0]).catch(() => {}); }
     await pc.setLocalDescription(await pc.createAnswer()); await gather(pc);
     if (pr.pc !== pc) return;
-    app.db.doc(docId(me, other, "a")).set({for:offer.ts, sdp:pc.localDescription.sdp, hello:pr.hello}).catch(() => {});
+    note(other, "answer sent"); app.db.doc(docId(me, other, "a")).set({for:offer.ts, sdp:pc.localDescription.sdp, hello:pr.hello}).catch(e => note(other, "answer write failed: " + (e && e.message)));
   }
   /* The answering side asks for a fresh offer with "hello" (on joining, after a reload, or after a drop) */
-  function sayHello(other){ const pr = peers[other]; pr.hello = Date.now(); app.db.doc(docId(me, other, "a")).set({hello:pr.hello}).catch(() => {}); }
+  function sayHello(other){ const pr = peers[other]; pr.hello = Date.now(); note(other, "hello sent"); app.db.doc(docId(me, other, "a")).set({hello:pr.hello}).catch(e => note(other, "hello write failed: " + (e && e.message))); }
   function restart(other){ const pr = peers[other]; if (!pr) return; if (iOffer(other)) makeOffer(other); else sayHello(other); }
-  function connect(other){
-    if (peers[other]) return; const pr = peers[other] = {seenTs:0, state:"waiting"};
+  /* Listens for the other side's signal. If the database drops the listener, it listens again after a moment. */
+  const note = (other, m) => { const pr = peers[other]; if (pr){ pr.log.push(((Date.now() % 100000)/1000).toFixed(1) + " " + m); if (pr.log.length > 12) pr.log.shift(); } };
+  /* What to do with the other side's note. Safe to call twice with the same note (the live listener and the check below). */
+  function onSignal(other, d){
+    const pr = peers[other]; if (!pr || !d) return;
     if (iOffer(other)){
-      pr.unsub = app.db.doc(docId(me, other, "a")).onSnapshot(snap => { if (!snap.exists) return; const d = snap.data() || {};
-        if (d.sdp && d.for === pr.offerTs && pr.pc && pr.pc.signalingState === "have-local-offer") pr.pc.setRemoteDescription({type:"answer", sdp:d.sdp}).catch(() => {});
-        else if (d.hello && d.hello > (pr.offerTs || 0) && d.hello !== pr.lastHello){ pr.lastHello = d.hello; makeOffer(other); }   // they (re)joined: offer again
-      }, () => {});
-      makeOffer(other);
-    } else {
-      pr.unsub = app.db.doc(docId(me, other, "o")).onSnapshot(snap => { if (!snap.exists) return; const d = snap.data() || {};
-        if (d.sdp && d.ts > pr.seenTs){ pr.seenTs = d.ts; answer(other, d); } }, () => {});
-      sayHello(other);
-    }
+      if (d.sdp && d.for === pr.offerTs && pr.pc && pr.pc.signalingState === "have-local-offer"){ note(other, "got answer"); pr.pc.setRemoteDescription({type:"answer", sdp:d.sdp}).catch(() => {}); }
+      else if (d.hello && d.hello > (pr.offerTs || 0) && d.hello !== pr.lastHello){ pr.lastHello = d.hello; note(other, "got hello"); makeOffer(other); }   // they (re)joined: offer again
+    } else if (d.sdp && d.ts > pr.seenTs){ pr.seenTs = d.ts; note(other, "got offer"); answer(other, d); }
   }
+  const theirDoc = other => docId(me, other, iOffer(other) ? "a" : "o");
+  /* Listens for the other side's note. If the database drops the listener, it listens again after a moment. */
+  function listen(other){
+    const pr = peers[other]; if (!pr) return; if (pr.unsub) try { pr.unsub(); } catch(e){}
+    const again = e => { console.warn("Camera signal listener stopped, listening again:", e && e.message); note(other, "listener stopped: " + (e && (e.code || e.message))); pr.unsub = null; setTimeout(() => { if (peers[other] === pr) listen(other); }, 3000); };
+    pr.unsub = app.db.doc(theirDoc(other)).onSnapshot(snap => { if (snap.exists) onSignal(other, snap.data()); }, again);
+  }
+  /* A live listener can occasionally go quiet without an error, so while a link isn't connected, read the note directly too */
+  function check(other){ app.db.doc(theirDoc(other)).get().then(snap => { if (snap.exists) onSignal(other, snap.data()); else note(other, "their note is missing"); })
+    .catch(e => note(other, "read failed: " + (e && (e.code || e.message)))); }
+  function connect(other){
+    if (peers[other]) return; const pr = peers[other] = {seenTs:0, state:"waiting", since:Date.now(), log:[]};
+    listen(other);
+    if (iOffer(other)) makeOffer(other); else sayHello(other);
+  }
+  /* Watchdog, every 2 s: a link that isn't connected reads the other side's note directly; one still stuck after STUCK_MS
+     listens again and starts over (a lost signal, a flaky network) */
+  const STUCK_MS = 12000;
+  setInterval(() => { if (!room) return; const now = Date.now();
+    Object.entries(peers).forEach(([other, pr]) => {
+      if (pr.state === "connected"){ pr.since = now; return; }
+      check(other);
+      if (now - pr.since > STUCK_MS){ pr.since = now; note(other, "stuck, starting over"); listen(other); restart(other); }
+    }); }, 2000);
   function drop(other){ const pr = peers[other]; if (!pr) return; if (pr.unsub) pr.unsub(); clearTimeout(pr.retryT); if (pr.pc) try { pr.pc.close(); } catch(e){}
     delete peers[other]; delete remote[other]; if (videos[other]) videos[other].srcObject = null; }
 
@@ -159,5 +189,7 @@ const cams = (() => {
       const b = box.querySelector(".cam-btn"); if (b){ b.textContent = local ? "Turn off" : "Turn on"; b.setAttribute("aria-label", local ? "Turn your camera off" : "Turn your camera on"); b.setAttribute("aria-pressed", String(!!local)); b.disabled = asking; }
     });
   }
-  return {sync, place, stop, toggle};
+  /* For troubleshooting: type cams.debug() in the browser console to see each camera connection's state */
+  function debug(){ return {relay:!!(relay && relay.length), camera:!!local, error, peers:Object.fromEntries(Object.entries(peers).map(([id, p]) => [id, {state:p.state, signaling:p.pc && p.pc.signalingState, ice:p.pc && p.pc.iceConnectionState, offerTs:p.offerTs, seenTs:p.seenTs, iOffer:iOffer(id), log:p.log}]))}; }
+  return {sync, place, stop, toggle, debug};
 })();

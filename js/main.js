@@ -702,7 +702,7 @@ function startOffline(){
   if (ps.length < 2){ const L = freeLook(ps); ps.push(mkPlayer("p-bot", botName(ps, L), ps.length, true, L)); }
   if (!ps.some(p => !p.bot)) ps[0].bot = false;
   closeQS(); stopOnline(); app.mode = "offline"; app.sel = -1; const s = newState(ps, {rules:st.rules});
-  const first = Math.floor(Math.random()*ps.length); s.turn = first; s.first = first;   // a random player goes first, offline too
+  const first = fairRandom(ps.length); s.turn = first; s.first = first;   // a random player goes first (browser crypto randomness), offline too
   say(s, `A new game begins. ${ps[first].name} goes first. Good luck, tycoons.`);
   app.lastRoll = 0; app.lastCard = -1; app.lastOwnCount = 0; app.lastStatus = "playing"; closeSheet(); setState(s, {reset:true}); saveOffline();
 }
@@ -796,7 +796,7 @@ function renderPicker(m){
   }
   if (m.canStart) $("startBtn").onclick = () => online ? lobbyEdit(st => { if (st.players.length < 2){ const L = freeLook(st.players); st.players.push(mkPlayer("bot-" + Math.random().toString(36).slice(2, 8), botName(st.players, L), st.players.length, true, L)); }
     /* Online, a random player goes first (not always the host) */
-    const first = Math.floor(Math.random()*st.players.length);
+    const first = fairRandom(st.players.length);   // browser crypto randomness, like the dice
     st.status = "playing"; st.phase = "roll"; st.turn = first; st.first = first; startGame(st);
     say(st, `The game begins. ${st.players[first].name} goes first. Good luck, tycoons.`); }).then(closeQS) : startOffline();
 }

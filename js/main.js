@@ -45,7 +45,6 @@ function setState(s, opts){
     if (prev && s.status === "over" && app.lastStatus !== "over") sfx("win");
     app.lastOwnCount = oc; app.lastRoll = s.rollId; app.lastStatus = s.status;
   }
-  if (typeof cams !== "undefined") cams.sync(s);   // start, keep up or end the camera connections (js/cams.js)
   render(); scheduleBot();
 }
 let cardT = null;
@@ -174,7 +173,6 @@ function renderPlayers(){
     }
     d.appendChild(info); box.appendChild(d);
   });
-  if (typeof cams !== "undefined") cams.place(s);   // live camera boxes under the names (online, js/cams.js)
   fitCash();
 }
 /* The cash a corner panel shows: the real cash, minus money still on its way in, plus money that hasn't left yet.
@@ -868,7 +866,7 @@ function tickClock(){
 setInterval(tickClock, 1000);
 
 function genCode(){ const A = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"; let c = ""; for (let i = 0; i < 5; i++) c += A[Math.floor(Math.random()*A.length)]; return c; }
-function stopOnline(){ if (typeof cams !== "undefined") cams.stop(); if (app.unsub){ app.unsub(); app.unsub = null; } if (fxUnsub){ fxUnsub(); fxUnsub = null; } clearTimeout(app.loadTimer); app.code = null; app.pickSeat = null; }
+function stopOnline(){ if (app.unsub){ app.unsub(); app.unsub = null; } if (fxUnsub){ fxUnsub(); fxUnsub = null; } clearTimeout(app.loadTimer); app.code = null; app.pickSeat = null; }
 async function hostRoom(name){
   const code = genCode();
   const s = newState([mkPlayer(app.me, name, 0, false, 0)], {status:"lobby", phase:"lobby", host:app.me, code, created:Date.now(), ver:2, rules:savedSettings()});

@@ -18,15 +18,6 @@ service cloud.firestore {
         && code.matches('^[A-Z0-9]{5}$')
         && request.resource.size() < 2000;
     }
-    // Camera connection notes between two players (js/cams.js): rtc/CODE_<a>_<b>_o (offer) and _a (answer).
-    // Only these small notes go through the database; the video itself goes straight between the players' browsers.
-    match /rtc/{id} {
-      allow read: if request.auth != null && id.matches('^[A-Z0-9]{5}_[A-Za-z0-9]{1,12}_[A-Za-z0-9]{1,12}_[oa]$');
-      allow write: if request.auth != null
-        && id.matches('^[A-Z0-9]{5}_[A-Za-z0-9]{1,12}_[A-Za-z0-9]{1,12}_[oa]$')
-        && request.resource.data.size() <= 4
-        && (!('sdp' in request.resource.data) || request.resource.data.sdp.size() < 30000);
-    }
     match /locks/{id} {
       allow read, write: if request.auth != null && id.matches('^games_[A-Z0-9]{5}$');
     }

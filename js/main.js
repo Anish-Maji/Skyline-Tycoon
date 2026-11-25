@@ -514,14 +514,39 @@ async function dispatch(a, asHost){
   const s = app.s; if (!s || app.writing) return;
   const p = s.players[s.turn];
   if (!asHost && !canControl(p)) return;
+  /* every roll carries who rolled it on what (the dice record, s.diceStats): a bot, an automatic move for an idle player, or this browser */
+  if (a.t === "roll" && !a.by) a = Object.assign({}, a, {by: p && p.bot ? "Bot" : a.auto ? "Auto move" : BROWSER});
   const res = act(s, a); if (res.err){ toast(res.err); app.popDismissed = null; render(); return; }   // a refused move reopens the card
   if (app.mode === "online"){
-    app.writing = true; setState(res.s);
-    try{ await app.db.doc("games/" + app.code).set(res.s); }
+    app.writing = true;
+    try{
+      const r = await saveMove(s.rev, res.s);
+      if (r.ok){ if (!app.s || (app.s.rev || 0) < res.s.rev) setState(res.s); }
+      else { if (!asHost) toast("Someone else moved first, so that move wasn't made. Try again."); if (r.cur) setState(clone(r.cur)); app.popDismissed = null; }
+    }
     catch(e){ toast(writeError(e)); app.popDismissed = null; }
-    finally{ app.writing = false; render(); }
+    finally{ app.writing = false; render(); scheduleBot(); }
   } else { setState(res.s); saveOffline(); }
 }
+/* Safe saving: a move is saved only if the room is still at the revision it was made from. If another device saved
+   a move in between, this one is refused (nothing is overwritten or undone) and the screen catches up. Firebase does
+   it in one transaction (commit in net.js); the claude.ai database takes the room's short lock, reads, checks, writes. */
+async function saveMove(baseRev, next){
+  const ref = app.db.doc("games/" + app.code);
+  if (ref.commit) return ref.commit(baseRev, next);
+  for (let k = 0; k < 8; k++){ const g = await ref.acquire({holder:app.me, ttlMs:3000}); if (g.acquired) break; await new Promise(r => setTimeout(r, 250)); }
+  const snap = await ref.get(), cur = snap.exists ? snap.data() : null;
+  if (cur && (cur.rev || 0) !== baseRev) return {ok:false, cur};
+  await ref.set(next); return {ok:true};
+}
+/* Which browser this is, for the dice record. Brave says so itself; the rest come from the browser's name tag. */
+let BROWSER = "Unknown";
+(async () => {
+  const ua = navigator.userAgent, phone = /Mobi|Android|iPhone|iPad/.test(ua) ? " (phone)" : "";
+  try { if (navigator.brave && await navigator.brave.isBrave()){ BROWSER = "Brave" + phone; return; } } catch(e){}
+  BROWSER = (/Edg\//.test(ua) ? "Edge" : /OPR\/|Opera/.test(ua) ? "Opera" : /SamsungBrowser/.test(ua) ? "Samsung Internet" : /Firefox\//.test(ua) ? "Firefox"
+    : /Chrome\//.test(ua) ? "Chrome" : /Safari\//.test(ua) ? "Safari" : "Other") + phone;
+})();
 function writeError(e){
   if (e && e.code === "invalid_argument"){ app.readOnly = true; return "You can watch this room but can't make moves. Ask the owner for edit access."; }
   if (e && e.code === "quota_exceeded") return "Room storage is full. Start a new room from the menu.";
@@ -918,9 +943,44 @@ function showOver(){
   const ranked = s.players.slice().sort((a, b) => netWorth(s, b) - netWorth(s, a));
   openSheet(`<h3>Game over</h3><div class="win" id="winName"></div><p class="lede" id="winWhy"></p>
   <div class="lobbylist">${ranked.map(p => `<div class="li"><span style="width:12px;height:12px;border-radius:50%;background:${p.color}"></span><span class="n">${esc(p.name)}</span><span class="muted">${p.bankrupt ? "Bankrupt" : moneyFull(netWorth(s, p))}</span></div>`).join("")}</div>
-  <div class="btns"><button class="btn" id="againBtn">Back to menu</button><button class="btn ghost" id="viewBtn">View board</button></div>`);
+  <div class="btns"><button class="btn" id="againBtn">Back to menu</button><button class="btn ghost" id="viewBtn">View board</button><button class="btn ghost" id="overDice">Dice stats</button></div>`);
   $("winName").textContent = w ? `${w.name} wins` : "Game over"; $("winWhy").textContent = s.winReason || "";
-  $("againBtn").onclick = leaveGame; $("viewBtn").onclick = () => { closeSheet(); $("overlay").dataset.view = "over-seen"; };
+  $("overDice").onclick = () => showDiceStats(() => { $("overlay").dataset.view = ""; showOver(); }); $("againBtn").onclick = leaveGame; $("viewBtn").onclick = () => { closeSheet(); $("overlay").dataset.view = "over-seen"; };
+}
+/* ---------- Dice stats ----------
+   Every roll of this game, per player (s.diceStats, recorded by the engine), next to what fair dice give:
+   an average of 7.0 per roll and doubles 1 roll in 6 (16.7%). The verdict uses how far each number is from fair,
+   measured in standard deviations (z), so a short streak isn't called unusual: under 2 is normal luck, 2 to 3 a bit
+   lucky or unlucky, 3 or more very unusual. Under DICE_MIN_ROLLS rolls it's too early to tell. */
+const DICE_MIN_ROLLS = 10;
+function diceVerdict(r){
+  if (!r || r.n < DICE_MIN_ROLLS) return {text:"Too few rolls to tell", tone:"muted"};
+  const zAvg = (r.sum/r.n - 7)/Math.sqrt(35/6/r.n), zDbl = (r.dbl/r.n - 1/6)/Math.sqrt((1/6)*(5/6)/r.n), z = Math.max(Math.abs(zAvg), Math.abs(zDbl));
+  const up = (Math.abs(zAvg) >= Math.abs(zDbl) ? zAvg : zDbl) > 0;
+  if (z < 2) return {text:"Normal luck", tone:"ok"};
+  if (z < 3) return {text:up ? "A bit lucky" : "A bit unlucky", tone:"warn"};
+  return {text:up ? "Very unusual: far luckier than fair dice" : "Very unusual: far unluckier than fair dice", tone:"bad"};
+}
+function showDiceStats(back){
+  const s = app.s; if (!s) return; const st = s.diceStats || {};
+  $("overlay").dataset.view = "dice";
+  const rows = s.players.map(p => {
+    const r = st[p.id], v = diceVerdict(r);
+    const faces = r ? r.faces.map((f, i) => { const pc = 100*f/(2*r.n); return `<span class="df" title="${i + 1}: ${pc.toFixed(1)}%"><i style="height:${Math.min(100, pc*3)}%"></i><b>${i + 1}</b></span>`; }).join("") : "";
+    return `<div class="dice-row" style="--pc:${p.color}">
+      <div class="dr-name"><span class="dot"></span><span class="nm"></span><span class="muted by"></span></div>
+      <div class="dr-nums"><span><b>${r ? r.n : 0}</b> rolls</span><span><b>${r ? (r.sum/r.n).toFixed(2) : "-"}</b> average <em>fair 7.00</em></span><span><b>${r ? (100*r.dbl/r.n).toFixed(1) + "%" : "-"}</b> doubles <em>fair 16.7%</em></span></div>
+      ${faces ? `<div class="dr-faces" aria-label="How often each face came up">${faces}</div>` : ""}
+      <div class="dr-verdict ${v.tone}">${v.text}</div></div>`; }).join("");
+  openSheet(`<h1 style="font-size:24px">Dice stats</h1>
+    <p class="lede">Every roll this game, compared with fair dice. Rolls use the browser's secure randomness, the same in every browser.</p>
+    <div class="dice-list">${rows}</div>
+    <p class="muted note">Streaks are normal: over a few dozen rolls one player often looks luckier. Only "Very unusual" is worth a closer look.</p>
+    <div class="btns"><button class="btn" id="diceBack">Back</button></div>`, "wide-ish");
+  /* names and browsers are typed by players: set as text */
+  document.querySelectorAll(".dice-row").forEach((row, i) => { const p = s.players[i], r = st[p.id];
+    row.querySelector(".nm").textContent = p.name; row.querySelector(".by").textContent = r ? Object.entries(r.by).sort((a, b) => b[1] - a[1]).map(([k]) => k).join(", ") : ""; });
+  $("diceBack").onclick = back || closeSheet;
 }
 /* Leave from the menu. In a running online game your seat goes to a bot first, so nobody gets stuck waiting for you. */
 async function quitOnline(){
@@ -938,7 +998,7 @@ function leaveGame(){
   setState(demoState(), {reset:true}); showHome();
 }
 $("menuBtn").onclick = () => { if (app.mode === "online" && app.s && app.s.status === "lobby"){ showLobby(); return; }
-  if (app.mode){ $("overlay").dataset.view = "menu"; openSheet(`<h1 style="font-size:24px">Menu</h1><p class="lede">${app.mode === "online" ? (app.s && app.s.status === "playing" && app.s.players.some(p => p.id === app.me && !p.left && !p.bankrupt) ? "If you leave, a bot takes over your seat and the game carries on for everyone else." : "You can rejoin with code " + esc(app.code) + ".") : "Your offline game is saved on this device."}</p>${rulesHtml(app.s && app.s.rules)}<div class="btns"><button class="btn" id="resBtn">Keep playing</button><button class="btn ghost" id="quitBtn">Leave game</button></div>`); $("resBtn").onclick = closeSheet; $("quitBtn").onclick = quitOnline; }
+  if (app.mode){ $("overlay").dataset.view = "menu"; openSheet(`<h1 style="font-size:24px">Menu</h1><p class="lede">${app.mode === "online" ? (app.s && app.s.status === "playing" && app.s.players.some(p => p.id === app.me && !p.left && !p.bankrupt) ? "If you leave, a bot takes over your seat and the game carries on for everyone else." : "You can rejoin with code " + esc(app.code) + ".") : "Your offline game is saved on this device."}</p>${rulesHtml(app.s && app.s.rules)}<div class="btns"><button class="btn" id="resBtn">Keep playing</button><button class="btn ghost" id="diceBtn">Dice stats</button><button class="btn ghost" id="quitBtn">Leave game</button></div>`); $("resBtn").onclick = closeSheet; $("diceBtn").onclick = () => showDiceStats(() => $("menuBtn").click()); $("quitBtn").onclick = quitOnline; }
   else showHome(); };
 $("musicBtn").onclick = () => { setMusic(!audio.music); $("musicBtn").setAttribute("aria-pressed", String(audio.music)); peekVolume(); };
 /* Music volume slider: shows when you hover the Music button (or for a few seconds after tapping it on a phone).

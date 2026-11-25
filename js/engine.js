@@ -15,6 +15,15 @@ function fairRandom(n){
 }
 /* One die, 1 to 6 */
 function rnd6(){ return 1 + fairRandom(6); }
+/* The dice record: every roll of the game, per player (s.diceStats[playerId]): how many rolls, the total of all rolls,
+   how many doubles, how often each face came up, and which browser (or "Bot", "Auto move") made the rolls.
+   The Dice stats view in main.js compares each player with fair dice. */
+function recordRoll(s, p, d1, d2, by){
+  const all = s.diceStats = s.diceStats || {};
+  const r = all[p.id] = all[p.id] || {n:0, sum:0, dbl:0, faces:[0, 0, 0, 0, 0, 0], by:{}};
+  r.n++; r.sum += d1 + d2; if (d1 === d2) r.dbl++; r.faces[d1 - 1]++; r.faces[d2 - 1]++;
+  const b = String(by || "Unknown").slice(0, 30); r.by[b] = (r.by[b] || 0) + 1;
+}
 /* This game's Quick settings, with defaults filled in */
 function rules(s){ return Object.assign({}, DEFAULT_SETTINGS, s && s.rules); }
 function money(n){ n = Math.round(n); const neg = n < 0; n = Math.abs(n);
@@ -338,7 +347,7 @@ function act(s0, a){
     case "roll": {
       if (s.phase !== "roll") return E("It's not time to roll.");
       const d1 = rnd6(), d2 = rnd6(), dbl = d1 === d2;
-      s.dice = [d1, d2]; s.rollId = (s.rollId||0) + 1; s.roller = p.id;
+      s.dice = [d1, d2]; s.rollId = (s.rollId||0) + 1; s.roller = p.id; recordRoll(s, p, d1, d2, a.by);
       if (p.jail > 0){
         if (dbl){ p.jail = 0; say(s, `${p.name} rolled doubles and sailed off Lost Island.`); walk(s, p, d1+d2); }
         else if (p.jail >= 3){ p.jail = 0; if (!charge(s, p, null, BAIL, "boat", `${p.name} paid ${money(BAIL)} for a boat after three tries.`, {k:"walk", n:d1+d2})) break; if (p.bankrupt){ finish(s); break; } walk(s, p, d1+d2); }

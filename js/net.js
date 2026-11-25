@@ -8,6 +8,8 @@
      db.doc(path).set(obj)
      db.doc(path).onSnapshot(cb, onError)    -> unsubscribe function
      db.doc(path).acquire({holder, ttlMs})   -> {acquired}   (a short lock while joining a room)
+     db.doc(path).commit(baseRev, obj)       -> {ok} or {ok:false, cur}   (optional: save only if nobody moved first;
+                                                 without it main.js uses the lock, a read and a check instead)
      user.id(), user.can("data.write")
    connectBackend() returns {kind, db, user}. kind is "claude", "firebase" or "none". */
 
@@ -33,6 +35,13 @@ async function connectFirebase(){
         get: () => ref.get(),
         set: obj => ref.set(clean(obj)),
         onSnapshot: (cb, onError) => ref.onSnapshot({includeMetadataChanges:false}, cb, onError),
+        /* Safe saving: writes obj only if the doc is still at revision baseRev, in one atomic step.
+           Returns {ok:true}, or {ok:false, cur} with the newer game when someone else moved first. */
+        commit: (baseRev, obj) => fs.runTransaction(async tx => {
+          const snap = await tx.get(ref), cur = snap.exists ? snap.data() : null;
+          if (cur && (cur.rev || 0) !== baseRev) return {ok:false, cur};
+          tx.set(ref, clean(obj)); return {ok:true};
+        }),
         /* A short lease: whoever holds it can edit the room for ttlMs. Others get {acquired:false} and try again. */
         acquire: ({holder, ttlMs}) => fs.runTransaction(async tx => {
           const snap = await tx.get(lock), now = Date.now(), cur = snap.exists ? snap.data() : null;

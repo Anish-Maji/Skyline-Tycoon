@@ -359,7 +359,7 @@ const board = (() => {
     let walkAt = performance.now();
     if (first){ lastRollId = s.rollId; diceRest(s); }
     else if (s.rollId !== lastRollId){ lastRollId = s.rollId; throwDice(s); walkAt += reduce.matches ? 0 : diceTotal(); }
-    if (!first) popNewBuildings(s); else prevLevels = levelsOf(s);
+    if (!first) popNewBuildings(s); else { prevLevels = levelsOf(s); lastQuakeSeq = s.bigQuake ? s.bigQuake.seq : null; }
     s.players.forEach(p => {
       const d = disp[p.id];
       if (!d || first){ disp[p.id] = {pos:p.pos, path:null}; return; }
@@ -374,7 +374,16 @@ const board = (() => {
         if (walk.length > 1){ d.path = walk; d.t0 = walkAt; d.hopsDone = 0; } else { d.path = null; d.pos = lm.from; }
         return;
       }
+      /* Shortcut / Wrong exit: walk to the Chance tile as usual, wait there while the card shows, then walk the card's steps */
+      if (fresh && lm.kind === "cardwalk" && !reduce.matches){
+        const steps = (lm.from - d.pos + N) % N, walk = [d.pos]; if (steps <= 12) for (let k = 1; k <= steps; k++) walk.push((d.pos + k) % N);
+        const dir = lm.steps < 0 ? -1 : 1, after = [lm.from]; for (let k = 1; k <= Math.abs(lm.steps); k++) after.push((lm.from + dir*k + N) % N);
+        d.after = {path:after, born:performance.now()};
+        if (walk.length > 1){ d.path = walk; d.t0 = walkAt; d.hopsDone = 0; } else { d.path = null; d.pos = lm.from; }
+        return;
+      }
       if (d.chase && !fresh) return;   // a chase is still playing: leave this player alone
+      if (d.after && !fresh) return;   // still to walk the card's steps
       if (fresh && lm.kind === "walk" && !reduce.matches){
         const steps = (lm.to - d.pos + N) % N;
         if (steps > 0 && steps <= 12){ const path = [d.pos]; for (let k = 1; k <= steps; k++) path.push((d.pos + k) % N);
@@ -449,9 +458,9 @@ const board = (() => {
   /* someone still walking (only players still in the game count) */
   const walking = () => !!state && state.players.some(p => !p.bankrupt && disp[p.id] && disp[p.id].path);
   /* a dog chase that hasn't finished. busy(true) (the Chance card waiting for the walk) ignores it, since the chase waits for the card */
-  const chasing = () => !!state && state.players.some(p => !p.bankrupt && disp[p.id] && disp[p.id].chase && !disp[p.id].chase.done);
+  const chasing = () => !!state && state.players.some(p => !p.bankrupt && disp[p.id] && ((disp[p.id].chase && !disp[p.id].chase.done) || disp[p.id].after));
   function busy(noMoney){ const now = performance.now(); return walking() || (!noMoney && chasing()) || now < diceUntil
-    || (!noMoney && flights.some(f => now < f.t0 + (f.dur || MONEY_FLY_MS))) || Object.values(buildPop).some(b => now < popEnd(b)); }
+    || (!noMoney && flights.some(f => now < f.t0 + (f.dur || MONEY_FLY_MS))) || Object.values(buildPop).some(b => now < popEnd(b) && !(noMoney && b.quake && !b.hit)); }   // a Big earthquake waiting for its card does not hold the card
   const OFFS = [[-.2,-.14],[.18,-.16],[-.14,.16],[.2,.12]];
   /* Height of a tile's top right now: tiles with someone on them rest a little lower, and dip when a character lands. */
   const pressT = {}; let occupied = new Set();
@@ -523,6 +532,10 @@ const board = (() => {
   function charPos(p, idx, now){
     const d = disp[p.id]; if (!d) return null;
     if (d.chase && !d.path && !d.chase.done){ const c = chasePos(d, idx, now); if (c) return c; }
+    if (d.after && !d.path){
+      if (chaseHold && chaseHold() && now - d.after.born < CHASE_HOLD_MAX){ const a = stand(d.pos, idx); return {X:a[0], Y:a[1], z:tileTop(d.pos, now), walking:false, tile:d.pos}; }   // the card is up
+      d.path = d.after.path; d.t0 = now + 250; d.hopsDone = 0; d.after = null;
+    }
     if (d.path && now < d.t0){ const a = stand(d.path[0], idx); return {X:a[0], Y:a[1], z:tileTop(d.path[0], now), walking:false, tile:d.path[0]}; }   // waiting for the dice
     if (d.path){
       const el = now - d.t0, k = Math.floor(el / HOP);
@@ -637,6 +650,7 @@ const board = (() => {
   function draw(now){
     if (!state){ requestAnimationFrame(draw); return; }
     V.ctx = ctx; ctx.clearRect(0, 0, W, H);
+    const shake = quakeShake(now); if (shake){ ctx.save(); ctx.translate(shake[0], shake[1]); }   // Big earthquake: the board trembles
     /* board slab */
     poly([P(0,S,0), P(S,S,0), P(S,S,-TH), P(0,S,-TH)], "#c9b99f"); poly([P(S,S,0), P(S,0,0), P(S,0,-TH), P(S,S,-TH)], "#ae9e84");
     rect3(0, 0, S, S, 0, "#a99b82");
@@ -689,6 +703,7 @@ const board = (() => {
           x.fillStyle = p.color; x.beginPath(); x.moveTo(b[0], y + s*1.6); x.lineTo(b[0] - s, y); x.lineTo(b[0] - s*.55, y - s*.6); x.lineTo(b[0] + s*.55, y - s*.6); x.lineTo(b[0] + s, y); x.closePath(); x.fill();
           x.fillStyle = "rgba(255,255,255,.45)"; x.beginPath(); x.moveTo(b[0], y + s*1.6); x.lineTo(b[0] - s, y); x.lineTo(b[0] - s*.2, y); x.closePath(); x.fill(); } }}); });
     headPt = null; items.sort((a, b) => a.dep - b.dep).forEach(it => it.f());
+    if (shake) ctx.restore();
     festivalBursts(now);
     drawDice(now);
     if (thought && headPt && !busy()) thinkBubble(headPt[0], headPt[1], thought, now);
@@ -905,10 +920,12 @@ const board = (() => {
   }
   const popEnd = P0 => P0.t + P0.brk + (P0.to ? (TILES[P0.i].type === "beach" ? RESORT_POP_MS : BUILD_POP_MS) : 0);
   function popNewBuildings(s){
-    const now = performance.now(), lv = levelsOf(s);
+    const now = performance.now(), lv = levelsOf(s), quake = s.bigQuake && s.bigQuake.seq !== lastQuakeSeq ? s.bigQuake : null;
+    if (s.bigQuake) lastQuakeSeq = s.bigQuake.seq;
     if (!reduce.matches) new Set([...Object.keys(lv), ...Object.keys(prevLevels)]).forEach(k => { const i = +k, ty = TILES[i].type; if (ty !== "city" && ty !== "beach") return;
       const was = prevLevels[k], is = lv[k]; if (!was && !is) return; if (was && is && was.l === is.l && was.o === is.o) return;
-      buildPop[i] = {i, t:now + BUILD_POP_DELAY, from:was || null, to:is || null, brk:was ? BREAK_MS : 0}; });
+      buildPop[i] = {i, t:now + BUILD_POP_DELAY, from:was || null, to:is || null, brk:was ? BREAK_MS : 0};
+      if (quake && quake.tile === i){ buildPop[i].quake = true; buildPop[i].brk = BIG_QUAKE_BREAK_MS; } });
     prevLevels = lv;
   }
   function breakSound(P0){ if (!P0.bsound){ P0.bsound = true; sfx("unbuild"); } }
@@ -932,15 +949,29 @@ const board = (() => {
     building(l, X, Y, color, e, u);   // constructed piece by piece
   }
   /* A building whose tile is no longer owned (wiped out, sold, owner bankrupt) still has to come apart */
+  /* ---------- Big earthquake ----------
+     The Chance card wipes out a random property. Once the card closes, the board shakes for QUAKE_SHAKE_MS
+     (strongest at the start, up to QUAKE_SHAKE tile units), the building comes apart over BIG_QUAKE_BREAK_MS and an
+     EARTHQUAKE! label rises over the tile. */
+  const QUAKE_SHAKE_MS = 1300, QUAKE_SHAKE = .09, BIG_QUAKE_BREAK_MS = 1300;
+  let lastQuakeSeq = null, shakeFrom = -1e9;
+  function quakeShake(now){ const t = (now - shakeFrom)/QUAKE_SHAKE_MS; if (t < 0 || t >= 1 || reduce.matches) return null;
+    const a = V.k*QUAKE_SHAKE*(1 - t); return [Math.sin(now*.11)*a + Math.sin(now*.37)*a*.4, Math.cos(now*.13)*a*.5]; }
+  function quakeLabel(X, Y, x){ if (x <= 0 || x >= 1) return; const c = V.ctx, p = P(X, Y, 1.1 + x*.5), fs = Math.max(13, V.k*.34)*(x < .15 ? .6 + x/.15*.4 : 1);
+    c.save(); c.globalAlpha = x > .75 ? (1 - x)/.25 : 1; c.font = `400 ${fs}px ${FONT.display}`; c.textAlign = "center"; c.textBaseline = "middle"; c.lineJoin = "round";
+    c.lineWidth = Math.max(4, fs*.28); c.strokeStyle = "#5a1d12"; c.strokeText("EARTHQUAKE!", p[0], p[1]); c.fillStyle = "#ffd23f"; c.fillText("EARTHQUAKE!", p[0], p[1]); c.restore(); }
   function goneBuildings(items){
     const now = performance.now();
     Object.values(buildPop).forEach(P0 => { const i = P0.i; if (P0.to || !P0.from || state.own[i]) return;
+      if (P0.quake && !P0.hit){ if (chaseHold && chaseHold()) P0.t = Math.max(P0.t, now + 500);   // the card first
+        else if (now >= P0.t){ P0.hit = true; shakeFrom = now; sfx("crash"); } }
       if (now >= P0.t + P0.brk){ delete buildPop[i]; return; }
       const r = tileRect(i), e = edgeDir(r.side), beach = TILES[i].type === "beach", a = along(r, beach ? .42 : .3), pp = !beach ? a : e === "X" ? [a[0] - .22, a[1]] : [a[0], a[1] - .22];
       items.push({dep:pp[0] + pp[1], f:onTile(i, () => {
         if (now < P0.t) return beach ? resort(pp[0], pp[1], .8, P0.from.color) : building(P0.from.l, pp[0], pp[1], P0.from.color, e);
         breakSound(P0); const x = (now - P0.t)/P0.brk;
-        beach ? unresort(pp[0], pp[1], .8, P0.from.color, x) : unbuild(P0.from.l, pp[0], pp[1], P0.from.color, e, x); })}); });
+        beach ? unresort(pp[0], pp[1], .8, P0.from.color, x) : unbuild(P0.from.l, pp[0], pp[1], P0.from.color, e, x);
+        if (P0.quake) quakeLabel(pp[0], pp[1], x); })}); });
   }
   function hit(mx, my){
     const a = (mx - V.ox)/V.k, b = (my - V.oy + TILE_H*V.k)*2/V.k, X = (a + b)/2, Y = (b - a)/2;

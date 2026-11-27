@@ -238,7 +238,7 @@ addEventListener("resize", fitCash);
 /* ---------- Chance pick timer ----------
    Free build, Force sale and Demolition can't be skipped. The player has PICK_MS to choose a city;
    then a random one from the glowing cities is picked for them. The countdown shows under the buttons. */
-const PICK_MS = 50000, PICK_MS_BY = {};   // 50 s for every Chance pick; give one card its own time like PICK_MS_BY = {gift:40000}
+const PICK_MS = 50000, PICK_MS_BY = {gift:65000};   // 50 s for a Chance pick; Gift a city gets 65 s (picking a city and who gets it)
 const pickTimer = {key:null, until:0};
 function startPickTimer(s, k){
   const key = s.rev + ":" + k; if (pickTimer.key !== key){ pickTimer.key = key; pickTimer.until = Date.now() + (PICK_MS_BY[k] || PICK_MS); }
@@ -621,14 +621,14 @@ function rulesHtml(R){
     `Each tycoon starts with ${money(R.startCash)}. Roll two dice and move around the board.${R.lapBonus ? ` Pass Start to collect ${money(R.lapBonus)}.` : ""}`,
     R.directBuild ? "Buy a city's land and up to three houses in one go. Land on it again to build more, then a Hotel." : "Buy a city's land, then build one level each time you land there, up to a Hotel.",
     `On your first lap you can build up to ${LEVEL_NAMES[FIRST_LAP_MAX_LEVEL]}. Pass Start once to unlock ${LEVEL_NAMES[FIRST_LAP_MAX_LEVEL + 1]} and Hotels.`,
-    "Rent doubles when you own a whole color set. Hotels and beaches can't be bought out. Hotels also survive earthquakes.",
+    "Rent doubles when you own a whole color set. Hotels and beaches can't be bought out. Hotels survive the Earthquake card, but a Big earthquake can flatten anything.",
     "Land on a rival's city to pay rent, then buy it from them for twice its value if you can afford it.",
     "Beaches pay more the more of them you own.",
     R.doublesAgain ? "Doubles: play the tile you land on (buy, build, pay or draw a Chance card), then roll again. Three doubles in a row strand you on Lost Island. Doubles also get you off Lost Island." : "Doubles get you off Lost Island. They don't give another roll.",
     `Landing on Lost Island strands you. Roll doubles, pay ${money(BAIL)} for a boat or use an escape card to leave. After three failed rolls you pay and go.`,
     !R.islandRent && "Players stuck on Lost Island can't collect rent.",
     R.festivals && `Every game starts with festivals in ${R.festivals === 1 ? "one random city" : R.festivals + " random cities"}. They last the whole game and double the rent there.`,
-    "Chance cards can be Boosts (shield, free build, tax exemption, escape card), Setbacks (blackout, fines, gift a city) or World events (earthquake, epidemic, force sale, world tour, demolition).",
+    "Chance cards can be Boosts (shield, free build, tax exemption, escape card), Setbacks (blackout, fines, gift a city) or World events (earthquake, big earthquake, epidemic, force sale, world tour, demolition).",
     "Grand Expo doubles rent in a city you choose. The Airport lets you fly anywhere next turn.",
     (wins.length ? `Win instantly with ${wins.length > 1 ? wins.slice(0, -1).join(", ") + " or " + wins[wins.length - 1] : wins[0]}. Or be` : "Win by being") + " the last tycoon with money.",
     R.playTime && `The game lasts ${R.playTime < 60 ? R.playTime + " minutes" : R.playTime/60 + (R.playTime === 60 ? " hour" : " hours")}. When time runs out, the round finishes and the richest tycoon wins.`

@@ -98,6 +98,9 @@ function txn(s, fromId, toId, amt){ if (!(amt > 0)) return; s.txSeq = (s.txSeq |
   s.txs = (s.txs || []).concat([s.tx]).slice(-8); }
 function setMove(s, p, kind, from, to){ s.moveSeq = (s.moveSeq||0) + 1; s.lastMove = {pid:p.id, kind, from, to, seq:s.moveSeq}; }
 function walk(s, p, n){ const from = p.pos, to = (from + n) % N; if (to < from) passStart(s, p); p.pos = to; setMove(s, p, "walk", from, to); }
+/* A Chance card that moves you a few tiles (Shortcut +4, Wrong exit -3). The board walks you to the Chance tile first,
+   shows the card, then walks you on tile by tile (lastMove kind "cardwalk", steps). Going forward past Start still pays. */
+function cardWalk(s, p, steps){ const from = p.pos, to = (from + steps + N) % N; if (steps > 0 && to < from) passStart(s, p); p.pos = to; setMove(s, p, "cardwalk", from, to); s.lastMove.steps = steps; }
 function jumpTo(s, p, to, viaStart){ const from = p.pos; if (viaStart && to < from) passStart(s, p); p.pos = to; setMove(s, p, "jump", from, to); }
 /* kind "chase": the board shows the player chased round to Lost Island by a dog (only for show: no rent, no Start money) */
 function sendJail(s, p, kind){ const from = p.pos; p.pos = 8; p.jail = 1; p.flight = false; s.extra = false; setMove(s, p, kind || "jump", from, 8); }
@@ -245,8 +248,16 @@ function quakeOptions(s, p){ return Object.keys(s.own).map(Number).filter(i => {
 function expoOptions(s, p){ return owned(s, p.id).filter(i => TILES[i].type === "city" && !(s.festivals || []).includes(i)); }
 const CHANCE_PICKS = {freebuild:freeBuildOptions, forcebuy:forceSaleOptions, demolish:demolishOptions, gift:giftOptions, quake:quakeOptions};
 function chanceOptions(s, p, k){ return CHANCE_PICKS[k] ? CHANCE_PICKS[k](s, p) : []; }
+/* Picks a Chance card, by weight (CARDS in config.js: weight 1 by default; give a card a weight to make it rarer or more common) */
+function pickCard(){
+  const total = CARDS.reduce((a, c) => a + (c.weight ?? 1), 0); let x = Math.random()*total;
+  for (const c of CARDS){ x -= c.weight ?? 1; if (x < 0) return c; }
+  return CARDS[CARDS.length - 1];
+}
+/* Big earthquake: any owned property of a player still in the game, a Hotel or a beach included, even the drawer's own */
+function megaQuakeTargets(s){ return Object.keys(s.own).map(Number).filter(i => { const st = s.own[i], o = st && byId(s, st.o); return o && !o.bankrupt; }); }
 function drawCard(s, p){
-  const c = CARDS[Math.floor(Math.random()*CARDS.length)], until = (s.round || 1) + EVENT_ROUNDS;
+  const c = pickCard(), until = (s.round || 1) + EVENT_ROUNDS;
   s.cardSeq = (s.cardSeq||0) + 1; s.card = {id:c.id, kind:c.kind, title:c.title, text:c.text, pid:p.id, seq:s.cardSeq};
   say(s, `${p.name} drew Chance: ${c.title}. ${c.text}`);
   switch (c.id){
@@ -256,10 +267,19 @@ function drawCard(s, p){
       say(s, `${p.name} has no city to build on yet.`); return finish(s);
     case "taxfree": p.taxFree = true; return finish(s);
     case "pass": p.passes = (p.passes || 0) + 1; return finish(s);
-    case "forward": walk(s, p, 4); return resolve(s, p);
+    case "forward": cardWalk(s, p, 4); return resolve(s, p);
     case "bonus": p.cash += 150; txn(s, null, p.id, 150); return finish(s);
     case "bday": s.players.forEach(o => { if (o !== p && !o.bankrupt) txn(s, o.id, p.id, pay(s, o, p, 30)); }); return finish(s);
     case "jail": if (!shielded(s, p, "trip to Lost Island")) sendJail(s, p, "chase"); return finish(s);
+    case "megaquake": {   // nobody chooses: a random property is wiped out, buildings and all; a Shield can't stop nature
+      const hits = megaQuakeTargets(s);
+      if (!hits.length){ say(s, "The ground shakes, but nobody owns anything yet."); return finish(s); }
+      const i = hits[fairRandom(hits.length)], owner = byId(s, s.own[i].o), what = LEVEL_NAMES[s.own[i].l] || "property";
+      delete s.own[i]; if (s.expo === i) s.expo = null;
+      s.quakeSeq = (s.quakeSeq || 0) + 1; s.bigQuake = {tile:i, seq:s.quakeSeq};   // the board shakes and the building falls once the card closes
+      say(s, `A big earthquake flattened ${owner.name}'s ${TILES[i].type === "beach" ? "resort on" : what + " in"} ${TILES[i].name}. It is up for sale again.`);
+      return finish(s);
+    }
     case "quake":   // the drawer picks a rival city to wipe out (see the "quake" action)
       if (quakeOptions(s, p).length){ s.phase = "act"; s.pending = {k:"quake"}; return; }
       say(s, "The ground shook, but no rival city could fall."); return finish(s);
@@ -271,7 +291,7 @@ function drawCard(s, p){
       return finish(s);
     }
     case "fine": if (!shielded(s, p, "fine") && !charge(s, p, null, 100, "fine", `${p.name} paid a ${money(100)} fine.`)) return; return finish(s);
-    case "back": { if (shielded(s, p, "wrong exit")) return finish(s); const from = p.pos; p.pos = (p.pos - 3 + N) % N; setMove(s, p, "jump", from, p.pos); return resolve(s, p); }
+    case "back": { if (shielded(s, p, "wrong exit")) return finish(s); cardWalk(s, p, -3); return resolve(s, p); }
     case "epidemic": {
       const gs = [...new Set(Object.keys(s.own).map(Number).filter(i => TILES[i].type === "city").map(i => TILES[i].g))];
       const g = pickOne(gs.length ? gs : Object.keys(GROUPS)); s.epidemics = s.epidemics || {}; s.epidemics[g] = until;

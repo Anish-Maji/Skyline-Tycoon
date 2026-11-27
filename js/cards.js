@@ -76,6 +76,19 @@ const CARD_ART = {
     c.lineWidth = 3; [[-70, -52], [52, 70]].forEach(([a, b]) => { for (let k = 0; k < 3; k++){ c.beginPath(); c.moveTo(x + a, y - 20 + k*16); c.lineTo(x + b, y - 20 + k*16); c.stroke(); } });
     cRound(c, x - 90, y + 44, 180, 8, 3); cFill(c, "#8a5a34");
   },
+  /* Big earthquake: a tall hotel tipping over a crack that splits the ground, with rubble falling and shake lines */
+  megaquake(c, x, y){
+    cRound(c, x - 90, y + 40, 76, 16, 3); cFill(c, "#8a5a34"); cRound(c, x + 14, y + 46, 76, 16, 3); cFill(c, "#8a5a34");   // ground, split and dropped
+    cPoly(c, [[x - 14, y + 40], [x + 2, y + 52], [x - 8, y + 58], [x + 14, y + 62], [x + 14, y + 46], [x - 4, y + 40]], "#3b2a20");   // the crack
+    c.save(); c.translate(x - 12, y + 40); c.rotate(-.24);   // the hotel, tipping
+    cRound(c, -26, -96, 52, 96, 3); cFill(c, "#f6efe2", INK, 3);
+    c.fillStyle = "#ffd77a"; for (let r = 0; r < 5; r++) for (let k = 0; k < 3; k++) c.fillRect(-20 + k*15, -88 + r*16, 9, 9);
+    cRound(c, -30, -104, 60, 10, 2); cFill(c, "#e5484d", INK, 2.5);
+    c.strokeStyle = INK; c.lineWidth = 3; c.beginPath(); c.moveTo(6, -96); c.lineTo(-4, -64); c.lineTo(8, -40); c.lineTo(-2, -12); c.stroke();   // crack up the tower
+    c.restore();
+    [[x + 34, y - 30, 7], [x + 50, y - 4, 5], [x + 26, y + 12, 6], [x + 58, y - 44, 4]].forEach(([a, b, r]) => { cRound(c, a - r, b - r, r*2, r*2, 1); cFill(c, "#b8c2c9", INK, 2); });   // rubble
+    c.strokeStyle = INK; c.lineWidth = 3; [[-84, -56], [-84, -40], [70, -70], [70, -54]].forEach(([dx, dy]) => { c.beginPath(); c.moveTo(x + dx, y + dy); c.lineTo(x + dx + 14, y + dy - 6); c.stroke(); });   // shake lines
+  },
   blackout(c, x, y){
     cRound(c, x - 90, y - 60, 180, 120, 10); cFill(c, "#1f2a44");
     cCircle(c, x + 56, y - 34, 16, "#fff3b0"); cCircle(c, x + 64, y - 40, 14, "#1f2a44");

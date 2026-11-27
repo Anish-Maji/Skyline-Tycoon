@@ -88,7 +88,8 @@ const SHUFFLE_CITIES = true, PRICE_JITTER = .15;
 const TAX_RATE = .1;
 const SIDES = [[1,2,3,5,6,7],[9,10,12,14,15],[17,19,20,22,23],[25,26,30,31]];
 /* Chance cards. kind is "good" (Boost), "bad" (Setback) or "world" (World event); it sets the card's label and color.
-   Every card is equally likely. List a card twice to make it more common. */
+   Cards are equally likely unless they have a weight: weight 1 is normal (the default), .3 comes up about a third as
+   often, 2 twice as often. List a card twice to make it more common too. */
 /* Chance cards. "title" is the ribbon on the card, "text" sits under the picture. The pictures are drawn in js/cards.js. */
 const CARDS = [
   {id:"shield",    kind:"good",  title:"Shield",              text:"Skip the next rent you owe, or block the next setback aimed at you."},
@@ -100,6 +101,8 @@ const CARDS = [
   {id:"bday",      kind:"good",  title:"Company anniversary", text:"Every tycoon pays you ₹30K."},
   {id:"jail",      kind:"bad",   title:"Storm warning",       text:"You wash up on Lost Island."},
   {id:"quake",     kind:"world", title:"Earthquake",          text:"Pick a rival's city. It is wiped out and goes back to the market. Hotels stand firm."},
+  /* nobody picks the target: a random property anywhere on the board is wiped out, Hotels and beaches too */
+  {id:"megaquake", kind:"world", title:"Big earthquake",      text:"A huge quake hits a random property. It is wiped out, even a Hotel, and goes back to the market."},
   {id:"blackout",  kind:"bad",   title:"Blackout",            text:"A random city collects no rent for 2 rounds."},
   {id:"fine",      kind:"bad",   title:"Fine",                text:"Pay ₹100K to the bank."},
   {id:"back",      kind:"bad",   title:"Wrong exit",          text:"Go back 3 tiles."},
